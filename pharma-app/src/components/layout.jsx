@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { B } from '../theme.js';
 import { NAV_SECTIONS } from '../navConfig.js';
 import { NOTIFICATIONS } from '../mockData.js';
@@ -44,7 +45,8 @@ export function Sidebar({ active, setActive, collapsed, setCollapsed, sidebarOpe
     );
 }
 
-export function Header({ page, onBell, showBell, onMenu, currentUser, onProfileClick }) {
+export function Header({ page, onBell, showBell, onMenu, currentUser, onEditProfile, onLogout }) {
+    const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     const unread = NOTIFICATIONS.filter(n => !n.read).length;
     return (
         <div style={{ height: 54, background: B.white, borderBottom: `1px solid ${B.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", gap: 12, flexShrink: 0, position: "relative", zIndex: 100 }}>
@@ -65,17 +67,34 @@ export function Header({ page, onBell, showBell, onMenu, currentUser, onProfileC
                     {unread > 0 && <span style={{ position: "absolute", top: -2, right: -2, width: 7, height: 7, borderRadius: "50%", background: B.red }} />}
                 </button>
                 <div style={{ width: 1, height: 22, background: B.border }} />
-                <div onClick={onProfileClick} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: B.navy, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <span style={{ color: B.white, fontSize: 11, fontWeight: 500 }}>
-                            {currentUser && currentUser.fullName ? currentUser.fullName.substring(0, 2).toUpperCase() : 'AD'}
-                        </span>
+                <div style={{ position: 'relative' }}>
+                    <div onClick={() => setProfileMenuOpen(!profileMenuOpen)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                        <div style={{ width: 30, height: 30, borderRadius: "50%", background: B.navy, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: B.white, fontSize: 11, fontWeight: 500 }}>
+                                {currentUser && currentUser.fullName ? currentUser.fullName.substring(0, 2).toUpperCase() : 'AD'}
+                            </span>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 12, fontWeight: 500, color: B.textPrimary }}>{currentUser && currentUser.fullName ? currentUser.fullName : 'Admin'}</div>
+                            <div style={{ fontSize: 10, color: B.textMuted }}>{currentUser && currentUser.role ? currentUser.role : 'Operations Manager'}</div>
+                        </div>
+                        <i className={`ti ${profileMenuOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} style={{ fontSize: 13, color: B.textMuted }} aria-hidden="true" />
                     </div>
-                    <div>
-                        <div style={{ fontSize: 12, fontWeight: 500, color: B.textPrimary }}>{currentUser && currentUser.fullName ? currentUser.fullName : 'Admin'}</div>
-                        <div style={{ fontSize: 10, color: B.textMuted }}>{currentUser && currentUser.role ? currentUser.role : 'Operations Manager'}</div>
-                    </div>
-                    <i className="ti ti-chevron-down" style={{ fontSize: 13, color: B.textMuted }} aria-hidden="true" />
+                    {profileMenuOpen && (
+                        <>
+                            <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setProfileMenuOpen(false)} />
+                            <div style={{ position: 'absolute', top: 40, right: 0, width: 180, background: B.white, border: `1px solid ${B.border}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, overflow: 'hidden' }}>
+                                <button onClick={() => { setProfileMenuOpen(false); onEditProfile(); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${B.border}`, textAlign: 'left', fontSize: 12, color: B.textPrimary, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <i className="ti ti-user-edit" style={{ fontSize: 16, color: B.textSecondary }} />
+                                    Edit Profile
+                                </button>
+                                <button onClick={() => { setProfileMenuOpen(false); onLogout(); }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: 12, color: B.red, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <i className="ti ti-logout" style={{ fontSize: 16 }} />
+                                    Sign Out
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

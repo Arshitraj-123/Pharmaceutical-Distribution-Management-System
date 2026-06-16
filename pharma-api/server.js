@@ -4,14 +4,32 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
+const http = require('http');
+const { Server } = require('socket.io');
+
+// Routes & Cron
+const dashboardRoutes = require('./routes/dashboard');
+require('./cron/jobs');
 
 // Models
 const User = require('./models/User');
 const Otp = require('./models/Otp');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*' }
+});
+
 app.use(cors());
 app.use(express.json());
+
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
+app.use('/api/dashboard', dashboardRoutes);
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
@@ -216,10 +234,16 @@ const initDb = async () => {
   }
 };
 
+// Mock Order route to test Socket.io emission
+app.post('/api/orders/mock', (req, res) => {
+  req.io.emit('dashboard:refresh-kpis');
+  res.json({ message: 'Order placed, refreshing KPIs via socket' });
+});
+
 mongoose.connection.once('open', () => {
   initDb();
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
 });

@@ -17,6 +17,7 @@ import { CompliancePage } from "./pages/CompliancePage.jsx";
 import { ReportsPage } from "./pages/ReportsPage.jsx";
 import { SettingsPage } from "./pages/SettingsPage.jsx";
 import { PharmaAuth } from "./pages/PharmaAuth.jsx";
+import { EditProfilePage } from "./pages/EditProfilePage.jsx";
 
 export default function App() {
     const [page, setPage] = useState("dashboard");
@@ -62,6 +63,7 @@ export default function App() {
         compliance: <CompliancePage />,
         reports: <ReportsPage />,
         settings: <SettingsPage />,
+        "edit-profile": <EditProfilePage setPage={setPage} currentUser={currentUser} />,
     };
 
     if (!isAuthenticated) {
@@ -78,7 +80,8 @@ export default function App() {
                     page={page} 
                     onBell={() => setShowNotif(true)} 
                     onMenu={() => setSidebarOpen(true)}
-                    onProfileClick={() => setShowProfileModal(true)}
+                    onEditProfile={() => setPage('edit-profile')}
+                    onLogout={handleLogout}
                     currentUser={currentUser} 
                 />
                 {showNotif && <NotifPanel onClose={() => setShowNotif(false)} />}
