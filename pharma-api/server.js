@@ -15,10 +15,26 @@ require('./cron/jobs');
 const User = require('./models/User');
 const Otp = require('./models/Otp');
 
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pharma';
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' }
+});
+
+// Socket.io Authentication Middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication error: No token provided'));
+  
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return next(new Error('Authentication error: Invalid token'));
+    socket.user = decoded;
+    next();
+  });
 });
 
 app.use(cors());
@@ -30,10 +46,6 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/dashboard', dashboardRoutes);
-
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pharma';
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI)
@@ -234,8 +246,10 @@ const initDb = async () => {
   }
 };
 
+// TODO: REMOVE BEFORE PRODUCTION DEPLOY
 // Mock Order route to test Socket.io emission
-app.post('/api/orders/mock', (req, res) => {
+const { verifyToken } = require('./middleware/auth');
+app.post('/api/orders/mock', verifyToken, (req, res) => {
   req.io.emit('dashboard:refresh-kpis');
   res.json({ message: 'Order placed, refreshing KPIs via socket' });
 });

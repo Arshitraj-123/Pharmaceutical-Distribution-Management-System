@@ -7,76 +7,76 @@ export function useDashboardData(token) {
   const [kpis, setKpis] = useState(null);
   const [alerts, setAlerts] = useState(null);
   const [sales, setSales] = useState(null);
+  const [topProducts, setTopProducts] = useState(null);
+  const [salesByCompany, setSalesByCompany] = useState(null);
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchKpis = useCallback(async () => {
+  const fetchEndpoint = async (endpoint, setter) => {
     if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/kpis`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setKpis(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch KPIs', err);
-    }
-  }, [token]);
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error(`Failed to fetch ${endpoint} (${res.status})`);
+    const data = await res.json();
+    setter(data);
+  };
 
-  const fetchAlerts = useCallback(async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/alerts`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAlerts(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch alerts', err);
-    }
-  }, [token]);
-
-  const fetchSales = useCallback(async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/sales`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSales(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch sales', err);
-    }
-  }, [token]);
+  const fetchKpis = useCallback(() => fetchEndpoint('/kpis', setKpis), [token]);
+  const fetchAlerts = useCallback(() => fetchEndpoint('/alerts', setAlerts), [token]);
+  const fetchSales = useCallback(() => fetchEndpoint('/sales', setSales), [token]);
+  const fetchTopProducts = useCallback(() => fetchEndpoint('/top-products', setTopProducts), [token]);
+  const fetchSalesByCompany = useCallback(() => fetchEndpoint('/sales/by-company', setSalesByCompany), [token]);
 
   const fetchAll = useCallback(async () => {
+    if (!token) return;
     setLoading(true);
-    await Promise.all([fetchKpis(), fetchAlerts(), fetchSales()]);
-    setLoading(false);
-  }, [fetchKpis, fetchAlerts, fetchSales]);
+    setError(null);
+    try {
+      await Promise.all([
+        fetchKpis(),
+        fetchAlerts(),
+        fetchSales(),
+        fetchTopProducts(),
+        fetchSalesByCompany()
+      ]);
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchKpis, fetchAlerts, fetchSales, fetchTopProducts, fetchSalesByCompany, token]);
 
   useEffect(() => {
     fetchAll();
 
-    // Setup polling
-    const kpiInterval = setInterval(fetchKpis, 5 * 60 * 1000); // 5 mins
-    const alertsInterval = setInterval(fetchAlerts, 10 * 60 * 1000); // 10 mins
+    // Polling setup (wrap in try/catch to not crash if background poll fails)
+    const safePoll = (fetchFn) => {
+      fetchFn().catch(err => console.error('Polling error:', err));
+    };
 
-    // Setup Socket.io
-    const socket = io('http://localhost:3000');
+    const kpiInterval = setInterval(() => safePoll(fetchKpis), 5 * 60 * 1000); // 5 mins
+    const alertsInterval = setInterval(() => safePoll(fetchAlerts), 10 * 60 * 1000); // 10 mins
+
+    // Socket.io setup with auth
+    const socket = io('http://localhost:3000', {
+      auth: { token }
+    });
+    
     socket.on('connect', () => {
       console.log('Connected to WebSocket for real-time dashboard updates');
     });
 
+    socket.on('connect_error', (err) => {
+      console.error('Socket.io connection error:', err.message);
+    });
+
     socket.on('dashboard:refresh-kpis', () => {
       console.log('Real-time event received: refreshing KPIs');
-      fetchKpis();
+      safePoll(fetchKpis);
+      safePoll(fetchTopProducts);
     });
 
     return () => {
@@ -84,7 +84,7 @@ export function useDashboardData(token) {
       clearInterval(alertsInterval);
       socket.disconnect();
     };
-  }, [fetchAll, fetchKpis, fetchAlerts]);
+  }, [fetchAll, fetchKpis, fetchAlerts, fetchTopProducts, token]);
 
-  return { kpis, alerts, sales, loading, error, refetch: fetchAll };
+  return { kpis, alerts, sales, topProducts, salesByCompany, loading, error, refetch: fetchAll };
 }

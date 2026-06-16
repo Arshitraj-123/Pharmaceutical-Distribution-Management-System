@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { verifyToken } = require('../middleware/auth');
 const Order = require('../models/Order');
+const OrderItem = require('../models/OrderItem');
 const Inventory = require('../models/Inventory');
 const Retailer = require('../models/Retailer');
 const DashboardCache = require('../models/DashboardCache');
@@ -114,6 +115,71 @@ router.get('/sales', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error fetching sales' });
+  }
+});
+
+// GET /api/dashboard/top-products
+router.get('/top-products', async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const orders = await Order.find({ createdAt: { $gte: today } }).select('_id');
+    const orderIds = orders.map(o => o._id);
+
+    const topProducts = await OrderItem.aggregate([
+      { $match: { orderId: { $in: orderIds } } },
+      { $group: { _id: '$productId', totalQty: { $sum: '$qtyOrdered' }, revenue: { $sum: '$lineTotal' } } },
+      { $sort: { totalQty: -1 } },
+      { $limit: 5 },
+      { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
+      { $unwind: '$product' },
+      { $project: { _id: 1, totalQty: 1, revenue: 1, name: '$product.tradeName', sku: '$product.sku' } }
+    ]);
+
+    res.json(topProducts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error fetching top products' });
+  }
+});
+
+// GET /api/dashboard/sales/by-company
+router.get('/sales/by-company', async (req, res) => {
+  try {
+    const cache = await DashboardCache.findOne({ cacheKey: 'sales_by_company' });
+    if (cache && cache.expiresAt > new Date()) {
+      return res.json(cache.data);
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const orders = await Order.find({ createdAt: { $gte: startOfMonth } }).select('_id');
+    const orderIds = orders.map(o => o._id);
+
+    const salesData = await OrderItem.aggregate([
+      { $match: { orderId: { $in: orderIds } } },
+      { $lookup: { from: 'products', localField: 'productId', foreignField: '_id', as: 'product' } },
+      { $unwind: '$product' },
+      { $group: { _id: '$product.companyId', totalSales: { $sum: '$lineTotal' } } },
+      { $lookup: { from: 'companies', localField: '_id', foreignField: '_id', as: 'company' } },
+      { $unwind: '$company' },
+      { $project: { _id: 1, totalSales: 1, companyName: '$company.name' } },
+      { $sort: { totalSales: -1 } }
+    ]);
+
+    const expiresAt = new Date(now.getTime() + 30 * 60000);
+    await DashboardCache.findOneAndUpdate(
+      { cacheKey: 'sales_by_company' },
+      { data: salesData, computedAt: now, expiresAt },
+      { upsert: true }
+    );
+
+    res.json(salesData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error fetching sales by company' });
   }
 });
 
