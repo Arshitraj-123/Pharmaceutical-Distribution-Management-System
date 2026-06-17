@@ -5,7 +5,7 @@ const verifyToken = (req, res, next) => {
   const token = req.header('Authorization')?.split(' ')[1]; // Expecting "Bearer <token>"
   
   if (!token) {
-    return res.status(401).json({ message: 'Access denied. No token provided.' });
+    return res.status(401).json({ code: 'AUTH_MISSING', message: 'Access denied. No token provided.' });
   }
 
   try {
@@ -13,7 +13,8 @@ const verifyToken = (req, res, next) => {
     req.user = decoded; // Contains id, email, role
     next();
   } catch (error) {
-    res.status(400).json({ message: 'Invalid token.' });
+    const code = error.name === 'TokenExpiredError' ? 'AUTH_EXPIRED' : 'AUTH_INVALID';
+    res.status(401).json({ code, message: 'Invalid or expired token.' });
   }
 };
 

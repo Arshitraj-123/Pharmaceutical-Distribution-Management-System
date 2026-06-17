@@ -3,8 +3,11 @@ import { PageHeader, AlertBar, KPICard, Card, CardTitle, DataTable } from '../co
 import { BarChart, DonutChart } from '../components/charts.jsx';
 import { StatusBadge } from '../components/ui.jsx';
 import { ORDERS, WEEKLY_SALES, MONTHLY_SALES, MONTHS, DAYS, COMPANY_SALES } from '../mockData.js';
+import { useDashboardData } from '../hooks/useDashboardData.js';
 
 export function DashboardPage({ setPage, showModal, currentUser }) {
+    const token = localStorage.getItem('auth_token');
+    const { loading } = useDashboardData(token);
     const getGreeting = () => {
         const hour = new Date().getHours();
         if (hour < 12) return "Good morning";
@@ -28,12 +31,20 @@ export function DashboardPage({ setPage, showModal, currentUser }) {
             </AlertBar>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 14 }}>
-                <KPICard icon="ti-shopping-cart" label="Today's orders" value="38" sub="↑ 6 vs yesterday" subColor={B.green} accent={B.navy} onClick={() => setPage("orders")} />
-                <KPICard icon="ti-package" label="Pending orders" value="12" sub="4 urgent" subColor={B.amber} accent={B.amber} onClick={() => setPage("orders")} />
-                <KPICard icon="ti-truck-delivery" label="Out for delivery" value="9" sub="3 beats active" subColor={B.navyMid} accent={B.navyMid} onClick={() => setPage("delivery")} />
-                <KPICard icon="ti-currency-rupee" label="Total outstanding" value="₹4.2L" sub="18 overdue accounts" subColor={B.red} accent={B.red} onClick={() => setPage("billing")} />
-                <KPICard icon="ti-alert-circle" label="Near-expiry SKUs" value="14" sub="Within 60 days" subColor={B.amber} accent={B.amber} onClick={() => setPage("inventory")} />
-                <KPICard icon="ti-file-invoice" label="e-Invoice pending" value="7" sub="IRP submission due" subColor={B.red} accent={B.red} onClick={() => setPage("billing")} />
+                {loading ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="animate-pulse" style={{ background: "#e2e8f0", borderRadius: 12, height: 96 }} />
+                    ))
+                ) : (
+                    <>
+                        <KPICard icon="ti-shopping-cart" label="Today's orders" value="38" sub="↑ 6 vs yesterday" subColor={B.green} accent={B.navy} onClick={() => setPage("orders")} />
+                        <KPICard icon="ti-package" label="Pending orders" value="12" sub="4 urgent" subColor={B.amber} accent={B.amber} onClick={() => setPage("orders")} />
+                        <KPICard icon="ti-truck-delivery" label="Out for delivery" value="9" sub="3 beats active" subColor={B.navyMid} accent={B.navyMid} onClick={() => setPage("delivery")} />
+                        <KPICard icon="ti-currency-rupee" label="Total outstanding" value="₹4.2L" sub="18 overdue accounts" subColor={B.red} accent={B.red} onClick={() => setPage("billing")} />
+                        <KPICard icon="ti-alert-circle" label="Near-expiry SKUs" value="14" sub="Within 60 days" subColor={B.amber} accent={B.amber} onClick={() => setPage("inventory")} />
+                        <KPICard icon="ti-file-invoice" label="e-Invoice pending" value="7" sub="IRP submission due" subColor={B.red} accent={B.red} onClick={() => setPage("billing")} />
+                    </>
+                )}
             </div>
 
             {/* Charts row */}

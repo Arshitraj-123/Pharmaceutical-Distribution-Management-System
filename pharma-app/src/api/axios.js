@@ -19,4 +19,22 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const authCodes = ['AUTH_MISSING', 'AUTH_EXPIRED', 'AUTH_INVALID'];
+    
+    if (
+      error.response && 
+      error.response.status === 401 && 
+      authCodes.includes(error.response.data?.code)
+    ) {
+      console.warn("Token expired or invalid. Logging out...");
+      localStorage.removeItem('auth_token');
+      window.location.href = '/'; // Or whatever the login route is
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;

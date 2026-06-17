@@ -1,10 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { B } from '../theme.js';
-import { RETAILERS, INVENTORY, NOTIFICATIONS } from '../mockData.js';
+import { NOTIFICATIONS } from '../mockData.js';
+import api from '../api/axios';
 
 export function NewOrderModal({ onClose }) {
     const [retailer, setRetailer] = useState("");
     const [items, setItems] = useState([{ product: "", qty: "", rate: "" }]);
+    const [retailersList, setRetailersList] = useState([]);
+    const [inventoryList, setInventoryList] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchLookups = async () => {
+            try {
+                const [retRes, invRes] = await Promise.all([
+                    api.get('/retailers'),
+                    api.get('/inventory')
+                ]);
+                setRetailersList(retRes.data || []);
+                setInventoryList(invRes.data || []);
+            } catch (err) {
+                console.error("Failed to fetch lookup data", err);
+                setError("Failed to load retailers or inventory.");
+            }
+        };
+        fetchLookups();
+    }, []);
 
     const addItem = () => setItems([...items, { product: "", qty: "", rate: "" }]);
     const removeItem = i => setItems(items.filter((_, idx) => idx !== i));
@@ -38,9 +60,9 @@ export function NewOrderModal({ onClose }) {
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Retailer *</label>
                         <select value={retailer} onChange={e => setRetailer(e.target.value)}
-                            style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
+                            style={{ width: "100%", height: 34, border: `1px solid ${error?.includes('Credit Limit') ? B.red : B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
                             <option value="">Select retailer…</option>
-                            {RETAILERS.map(r => <option key={r.id} value={r.id}>{r.name} — {r.city}</option>)}
+                            {retailersList.map(r => <option key={r._id} value={r._id}>{r.name} — {r.city} (Limit: ₹{r.creditLimit})</option>)}
                         </select>
                     </div>
 
@@ -70,7 +92,7 @@ export function NewOrderModal({ onClose }) {
                                                 <select value={it.product} onChange={e => updateItem(i, "product", e.target.value)}
                                                     style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }}>
                                                     <option value="">Select…</option>
-                                                    {INVENTORY.map(inv => <option key={inv.id} value={inv.id}>{inv.name}</option>)}
+                                                    {inventoryList.map(inv => <option key={inv._id} value={inv._id}>{inv.name} (Qty: {inv.totalQty})</option>)}
                                                 </select>
                                             </td>
                                             <td style={{ padding: "6px 8px" }}>
@@ -110,9 +132,47 @@ export function NewOrderModal({ onClose }) {
                     </div>
 
                     {/* Actions */}
+                    {error && (
+                        <div style={{ marginBottom: 14, padding: "10px 12px", background: "#fef2f2", border: "1px solid #f87171", borderRadius: 8, color: "#b91c1c", fontSize: 12 }}>
+                            {error}
+                        </div>
+                    )}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Place order</button>
+                        <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit" }}>Cancel</button>
+                        <button onClick={async () => {
+                            if (!retailer || items.some(i => !i.product || !i.qty)) {
+                                setError("Please fill in all required fields.");
+                                return;
+                            }
+                            try {
+                                setLoading(true);
+                                setError(null);
+                                const body = {
+                                    retailerId: retailer,
+                                    items: items.map(it => ({
+                                        productId: it.product,
+                                        qtyOrdered: parseInt(it.qty, 10),
+                                        rate: parseFloat(it.rate)
+                                    })),
+                                    paymentMode: "Credit"
+                                };
+                                const res = await api.post('/orders', body);
+                                // Success or 202 Credit Hold
+                                window.dispatchEvent(new Event('order-added'));
+                                onClose();
+                            } catch (err) {
+                                if (err.response?.status === 400 || err.response?.status === 422) {
+                                    // Our custom credit limit or FEFO error message
+                                    setError(err.response.data.message);
+                                } else {
+                                    setError("An unexpected error occurred. Please try again.");
+                                }
+                            } finally {
+                                setLoading(false);
+                            }
+                        }} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
+                            {loading ? "Placing..." : "Place order"}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -150,15 +210,61 @@ export function NotifPanel({ onClose }) {
 }
 
 export function NewStockModal({ onClose }) {
+    const [products, setProducts] = useState([]);
     const [product, setProduct] = useState("");
     const [batch, setBatch] = useState("");
     const [expiry, setExpiry] = useState("");
     const [qty, setQty] = useState("");
     const [rack, setRack] = useState("");
+    const [ptr, setPtr] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        const fetchProducts = async () => {
+            try {
+                const res = await api.get('/products');
+                setProducts(res.data.products || []);
+            } catch (err) {
+                console.error("Failed to load products", err);
+            }
+        };
+        fetchProducts();
+    }, []);
+
+    const selectedProduct = products.find(p => p._id === product);
+
+    const handleSubmit = async () => {
+        setError("");
+        if (!product || !batch || !expiry || !qty || !ptr) {
+            setError("Please fill all required fields (Product, Batch, Expiry, Qty, PTR).");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const payload = {
+                productId: product,
+                batchNo: batch,
+                expiryDate: new Date(expiry + '-01'), // convert YYYY-MM to Date
+                qtyReceived: Number(qty),
+                rackLocation: rack,
+                ptr: Number(ptr)
+            };
+            
+            await api.post('/inventory/grn', payload);
+            window.dispatchEvent(new Event('inventory-updated'));
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.message || "Failed to save GRN");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-            <div style={{ background: B.white, borderRadius: 14, width: "min(500px,95vw)", maxHeight: "85vh", overflow: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(500px,95vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
                 {/* Header */}
                 <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
@@ -171,13 +277,19 @@ export function NewStockModal({ onClose }) {
                 </div>
 
                 <div style={{ padding: "16px 20px" }}>
+                    {error && <div style={{ marginBottom: 14, padding: "8px 12px", background: "#FFF8F8", color: B.red, fontSize: 12, borderRadius: 6, border: `1px solid #FFE5E5` }}>{error}</div>}
+                    
                     {/* Product select */}
                     <div style={{ marginBottom: 14 }}>
                         <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Product *</label>
-                        <select value={product} onChange={e => setProduct(e.target.value)}
+                        <select value={product} onChange={e => {
+                            setProduct(e.target.value);
+                            const p = products.find(prod => prod._id === e.target.value);
+                            if (p && p.ptr) setPtr(p.ptr.toString());
+                        }}
                             style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
                             <option value="">Select product…</option>
-                            {INVENTORY.map(inv => <option key={inv.id} value={inv.id}>{inv.name} — {inv.company}</option>)}
+                            {products.map(p => <option key={p._id} value={p._id}>{p.tradeName} — {p.companyId?.name || 'Unknown'}</option>)}
                         </select>
                     </div>
 
@@ -194,23 +306,113 @@ export function NewStockModal({ onClose }) {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
                         <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Quantity (Units) *</label>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Qty (Units) *</label>
                             <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0"
                                 style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
                         </div>
                         <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Rack Location</label>
-                            <input type="text" value={rack} onChange={e => setRack(e.target.value)} placeholder="e.g. R4-A"
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Cost Price (PTR) *</label>
+                            <input type="number" step="0.01" value={ptr} onChange={e => setPtr(e.target.value)} placeholder="₹"
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Rack</label>
+                            <input type="text" value={rack} onChange={e => setRack(e.target.value)} placeholder="R4-A"
                                 style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
                         </div>
                     </div>
 
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Add Stock</button>
+                        <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>Cancel</button>
+                        <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
+                            {loading ? "Saving..." : "Add Stock"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function EditStockModal({ batchData, onClose }) {
+    const [rack, setRack] = useState(batchData?.rack || "");
+    const [ptr, setPtr] = useState(batchData?.ptr || "");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    const handleSubmit = async () => {
+        try {
+            setLoading(true);
+            await api.patch(`/inventory/batches/${batchData._id}`, { rackLocation: rack, costPrice: ptr });
+            window.dispatchEvent(new Event('inventory-updated'));
+            onClose();
+        } catch (err) {
+            setError("Failed to update stock");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(400px,95vw)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 15, fontWeight: 500, color: B.textPrimary }}>Edit Batch Details</div>
+                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>{batchData?.name} ({batchData?.batch})</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20 }}>
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+                <div style={{ padding: "16px 20px" }}>
+                    {error && <div style={{ marginBottom: 14, color: B.red, fontSize: 12 }}>{error}</div>}
+                    <div style={{ marginBottom: 14 }}>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Rack Location</label>
+                        <input type="text" value={rack} onChange={e => setRack(e.target.value)}
+                            style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ marginBottom: 20 }}>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Cost Price (PTR)</label>
+                        <input type="number" step="0.01" value={ptr} onChange={e => setPtr(e.target.value)}
+                            style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer" }}>Cancel</button>
+                        <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, cursor: "pointer" }}>Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ViewStockModal({ batchData, onClose }) {
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(400px,95vw)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 15, fontWeight: 500, color: B.textPrimary }}>Batch Info</div>
+                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>Read-only summary</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20 }}>
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+                <div style={{ padding: "16px 20px", fontSize: 13, color: B.textSecondary, lineHeight: "1.6" }}>
+                    <div><strong>Product:</strong> {batchData?.name}</div>
+                    <div><strong>Company:</strong> {batchData?.company}</div>
+                    <div><strong>Batch No:</strong> {batchData?.batch}</div>
+                    <div><strong>Stock:</strong> {batchData?.stock} units</div>
+                    <div><strong>Expiry:</strong> {batchData?.expiry}</div>
+                    <div><strong>PTR:</strong> ₹{batchData?.ptr || "N/A"}</div>
+                    <div><strong>Rack:</strong> {batchData?.rack || "Unassigned"}</div>
+                    <div style={{ marginTop: 20, textAlign: "right" }}>
+                        <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textPrimary, cursor: "pointer" }}>Close</button>
                     </div>
                 </div>
             </div>
@@ -646,6 +848,155 @@ export function NewUserModal({ onClose }) {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+export function UpdateOrderStatusModal({ orderId, currentStatus, onClose }) {
+    const [status, setStatus] = useState(currentStatus);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const validStatuses = ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold'];
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(400px,95vw)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 15, fontWeight: 500, color: B.textPrimary }}>Update Status</div>
+                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>{orderId}</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20, display: "flex" }}>
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+
+                <div style={{ padding: "16px 20px" }}>
+                    <div style={{ marginBottom: 14 }}>
+                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Order Status *</label>
+                        <select value={status} onChange={e => setStatus(e.target.value)}
+                            style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
+                            {validStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                    </div>
+
+                    {error && (
+                        <div style={{ marginBottom: 14, padding: "10px 12px", background: "#fef2f2", border: "1px solid #f87171", borderRadius: 8, color: "#b91c1c", fontSize: 12 }}>
+                            {error}
+                        </div>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit" }}>Cancel</button>
+                        <button onClick={async () => {
+                            try {
+                                setLoading(true);
+                                setError(null);
+                                await api.patch(`/orders/${orderId}/status`, { status });
+                                window.dispatchEvent(new Event('order-added')); // Re-fetch list
+                                onClose();
+                            } catch (err) {
+                                setError(err.response?.data?.message || "An unexpected error occurred.");
+                            } finally {
+                                setLoading(false);
+                            }
+                        }} disabled={loading || status === currentStatus} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: (loading || status === currentStatus) ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: (loading || status === currentStatus) ? 0.7 : 1 }}>
+                            {loading ? "Saving..." : "Update status"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ViewOrderModal({ order, autoPrint, onClose }) {
+    useEffect(() => {
+        if (autoPrint) {
+            setTimeout(() => window.print(), 100);
+        }
+    }, [autoPrint]);
+
+    if (!order) return null;
+
+    return (
+        <div className="print-modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "flex-start", zIndex: 1000, overflowY: "auto", padding: 20 }}>
+            <div className="print-modal-content" style={{ background: B.white, width: "100%", maxWidth: 800, padding: 40, borderRadius: 8, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}>
+                <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20, gap: 10 }}>
+                    <button onClick={() => window.print()} style={{ padding: "8px 16px", background: B.navy, color: B.white, border: "none", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}><i className="ti ti-printer" /> Print Invoice</button>
+                    <button onClick={onClose} style={{ padding: "8px 16px", background: B.surface, border: `1px solid ${B.border}`, borderRadius: 6, cursor: "pointer" }}>Close</button>
+                </div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", borderBottom: `2px solid ${B.border}`, paddingBottom: 20, marginBottom: 20 }}>
+                    <div>
+                        <h1 style={{ margin: 0, color: B.navyMid, fontSize: 24 }}>INVOICE</h1>
+                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>Order #: {order.orderId}</p>
+                        <p style={{ margin: "2px 0 0 0", color: B.textSecondary }}>Date: {new Date(order.createdAt).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                        <h2 style={{ margin: 0, fontSize: 18 }}>Aadhya Pharmex</h2>
+                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>Patna, Bihar</p>
+                    </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 30 }}>
+                    <div>
+                        <h3 style={{ margin: "0 0 10px 0", fontSize: 14, color: B.textSecondary, textTransform: "uppercase" }}>Bill To</h3>
+                        <p style={{ margin: 0, fontWeight: 600 }}>{order.retailerId?.name || "Unknown Retailer"}</p>
+                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>{order.retailerId?.city || "Unknown City"}</p>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                        <p style={{ margin: 0, color: B.textSecondary }}>Status: <strong>{order.status}</strong></p>
+                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>Payment: {order.paymentMode}</p>
+                    </div>
+                </div>
+
+                <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 30 }}>
+                    <thead>
+                        <tr style={{ borderBottom: `1px solid ${B.border}` }}>
+                            <th style={{ padding: 10, textAlign: "left", color: B.textSecondary, fontWeight: 500 }}>Product</th>
+                            <th style={{ padding: 10, textAlign: "left", color: B.textSecondary, fontWeight: 500 }}>Batch</th>
+                            <th style={{ padding: 10, textAlign: "right", color: B.textSecondary, fontWeight: 500 }}>Qty</th>
+                            <th style={{ padding: 10, textAlign: "right", color: B.textSecondary, fontWeight: 500 }}>Rate</th>
+                            <th style={{ padding: 10, textAlign: "right", color: B.textSecondary, fontWeight: 500 }}>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {order.items?.map((item, i) => (
+                            <tr key={i} style={{ borderBottom: `1px solid ${B.border}` }}>
+                                <td style={{ padding: 10 }}>{item.productId?.tradeName || "Unknown"}</td>
+                                <td style={{ padding: 10 }}>{item.batchId?.batchNo || "Unknown"}</td>
+                                <td style={{ padding: 10, textAlign: "right" }}>{item.qtyOrdered}</td>
+                                <td style={{ padding: 10, textAlign: "right" }}>₹{item.rate?.toFixed(2)}</td>
+                                <td style={{ padding: 10, textAlign: "right" }}>₹{item.lineTotal?.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <div style={{ width: 300 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${B.border}` }}>
+                            <span>Subtotal</span>
+                            <span>₹{order.totalValue?.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "15px 0", fontWeight: "bold", fontSize: 18 }}>
+                            <span>Total</span>
+                            <span>₹{order.totalValue?.toLocaleString('en-IN')}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <style dangerouslySetInnerHTML={{__html: `
+                @media print {
+                    body * { visibility: hidden; }
+                    .print-modal-content, .print-modal-content * { visibility: visible; }
+                    .print-modal-content { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; padding: 0; }
+                    .no-print { display: none !important; }
+                    .print-modal-overlay { background: none; position: absolute; padding: 0; display: block; overflow: visible; }
+                }
+            `}} />
         </div>
     );
 }

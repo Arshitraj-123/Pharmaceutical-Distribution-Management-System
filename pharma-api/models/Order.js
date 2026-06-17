@@ -5,7 +5,7 @@ const OrderSchema = new mongoose.Schema({
   retailerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Retailer', required: true },
   items: [{ type: mongoose.Schema.Types.ObjectId, ref: 'OrderItem' }],
   totalValue: { type: Number, default: 0 },
-  status: { type: String, enum: ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold'], default: 'Pending' },
   paymentMode: { type: String, enum: ['Cash', 'Credit', 'UPI', 'Bank Transfer'], default: 'Credit' },
   dispatchedAt: { type: Date },
   deliveredAt: { type: Date },

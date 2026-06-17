@@ -9,11 +9,20 @@ const { Server } = require('socket.io');
 
 // Routes & Cron
 const dashboardRoutes = require('./routes/dashboard');
+const ordersRoutes = require('./routes/orders');
+const inventoryRoutes = require('./routes/inventory');
+const retailersRoutes = require('./routes/retailers');
+const productsRoutes = require('./routes/products');
 require('./cron/jobs');
 
 // Models
 const User = require('./models/User');
 const Otp = require('./models/Otp');
+const Product = require('./models/Product');
+const Company = require('./models/Company');
+const Retailer = require('./models/Retailer');
+const Inventory = require('./models/Inventory');
+const Order = require('./models/Order');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
@@ -46,6 +55,10 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/orders', ordersRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/retailers', retailersRoutes);
+app.use('/api/products', productsRoutes);
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI)
@@ -250,6 +263,9 @@ const initDb = async () => {
 // Mock Order route to test Socket.io emission
 const { verifyToken } = require('./middleware/auth');
 app.post('/api/orders/mock', verifyToken, (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ message: 'Forbidden in production' });
+  }
   req.io.emit('dashboard:refresh-kpis');
   res.json({ message: 'Order placed, refreshing KPIs via socket' });
 });
