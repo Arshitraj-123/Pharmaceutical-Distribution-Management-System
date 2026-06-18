@@ -12,6 +12,64 @@ Aadhya Pharmex DMS is an enterprise-grade application designed to streamline pha
 - Scheme and Promotion Management
 - GST, Billing, and Regulatory Compliance Tracking (Automated Cron Jobs)
 
+## Architecture
+
+```mermaid
+graph TD
+    %% Client Layer
+    subgraph ClientLayer["Client Layer (React.js Vite — responsive web application)"]
+        A[Admin dashboard<br/>Live KPIs and charts]
+        B[Orders and inventory<br/>FEFO batch tracking]
+        C[Retailers and billing<br/>CRM and GST invoicing]
+    end
+    
+    ClientLayer -- "REST API + WebSocket" --> AppLayer
+    
+    %% Application Layer
+    subgraph AppLayer["Application Layer (Node.js + Express.js — RESTful API server)"]
+        D[JWT authentication<br/>bcrypt + OTP 2FA]
+        E[Business logic<br/>Credit checks, atomic FEFO]
+        F[Socket.io engine<br/>Real-time dashboard sync]
+        G[Node-cron background jobs<br/>Sales aggregation + expiry alerts]
+        H[GST compliance engine<br/>e-Invoice, e-Way Bill, GSTR-1]
+    end
+    
+    AppLayer -- "Mongoose ODM queries" --> DataLayer
+    
+    %% Data Layer
+    subgraph DataLayer["Data Layer (MongoDB — indexed collections)"]
+        I[Orders & Order items]
+        J[Products & Inventory batches]
+        K[Retailers & Companies]
+        L[Invoices & Notifications]
+        M[Users & OTP records]
+        N[Dashboard cache TTL indexed]
+        O[Compound indexes on createdAt, expiryDate, licenseExpiry, status]
+    end
+
+    %% Styles
+    style ClientLayer fill:#0B4F8C,stroke:#0B4F8C,color:#fff
+    style A fill:#075940,stroke:#268565,color:#fff
+    style B fill:#075940,stroke:#268565,color:#fff
+    style C fill:#075940,stroke:#268565,color:#fff
+
+    style AppLayer fill:#753119,stroke:#753119,color:#fff
+    style D fill:#875A18,stroke:#A87932,color:#fff
+    style E fill:#875A18,stroke:#A87932,color:#fff
+    style F fill:#875A18,stroke:#A87932,color:#fff
+    style G fill:#7F253F,stroke:#A63D5D,color:#fff
+    style H fill:#7F253F,stroke:#A63D5D,color:#fff
+
+    style DataLayer fill:#265C10,stroke:#265C10,color:#fff
+    style I fill:#4D4D4D,stroke:#666666,color:#fff
+    style J fill:#4D4D4D,stroke:#666666,color:#fff
+    style K fill:#4D4D4D,stroke:#666666,color:#fff
+    style L fill:#4D4D4D,stroke:#666666,color:#fff
+    style M fill:#4D4D4D,stroke:#666666,color:#fff
+    style N fill:#4D4D4D,stroke:#666666,color:#fff
+    style O fill:#1c420b,stroke:#3b821c,color:#fff
+```
+
 ## Features
 - **Frontend App (`pharma-app`):** Built with React 19 + Vite 6. Features a beautifully styled, custom UI using `theme.js` with responsive layouts, comprehensive modals, and dynamic KPI charts. Uses a custom `useDashboardData` hook for real-time polling and WebSocket synchronization.
 - **Backend API (`pharma-api`):** Built with Node.js and Express. Connects to MongoDB via Mongoose. Protected by JWT middleware.
