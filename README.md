@@ -17,6 +17,7 @@ Aadhya Pharmex DMS is an enterprise-grade application designed to streamline pha
 - **Backend API (`pharma-api`):** Built with Node.js and Express. Connects to MongoDB via Mongoose. Protected by JWT middleware.
 - **Real-Time Engine:** Uses `Socket.io` to instantly push order updates to connected clients.
 - **Background Cron Jobs:** Powered by `node-cron` to automatically compute heavy sales aggregations every 30 minutes, and to monitor expiring inventory and drug licenses every hour to generate notifications.
+- **Delivery & Logistics Module:** Full dispatch control with exact beat-to-retailer mapping, driver assignment, live KPI tracking, and granular per-order fulfillment cascades with integrated UI modals.
 - **Modals System:** A highly interactive experience for creating new orders, stocks, dispatches, retailers, purchases, schemes, and invoices directly from the dashboard.
 
 ## Project Structure
@@ -26,8 +27,8 @@ The repository contains two main directories:
    - `src/components/` - Reusable UI components including Layout, Charts, Modals, and standard UI elements.
    - `src/hooks/` - Contains real-time custom hooks (e.g., `useDashboardData.js`).
 2. `pharma-api/` - The Node.js/Express backend server.
-   - `models/` - 11 Mongoose schemas (User, Otp, Order, OrderItem, Product, Inventory, Retailer, Invoice, Company, Notification, DashboardCache).
-   - `routes/` - Specific endpoint routers (e.g., `dashboard.js`).
+   - `models/` - 12 Mongoose schemas (User, Otp, Order, OrderItem, Product, Inventory, Retailer, Invoice, Company, Notification, DashboardCache, Dispatch).
+   - `routes/` - Specific endpoint routers (e.g., `dashboard.js`, `delivery.js`).
    - `cron/` - Background schedule definitions.
    - `middleware/` - JWT authentication guards.
    - `server.js` - Main Express/Socket.io server entry point.

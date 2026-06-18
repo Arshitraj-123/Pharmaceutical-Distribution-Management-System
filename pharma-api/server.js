@@ -13,6 +13,7 @@ const ordersRoutes = require('./routes/orders');
 const inventoryRoutes = require('./routes/inventory');
 const retailersRoutes = require('./routes/retailers');
 const productsRoutes = require('./routes/products');
+const deliveryRoutes = require('./routes/delivery');
 require('./cron/jobs');
 
 // Models
@@ -59,6 +60,7 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/retailers', retailersRoutes);
 app.use('/api/products', productsRoutes);
+app.use('/api/delivery', deliveryRoutes);
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI)

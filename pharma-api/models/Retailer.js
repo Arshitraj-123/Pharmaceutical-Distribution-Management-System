@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const RetailerSchema = new mongoose.Schema({
   name: { type: String, required: true },
   city: { type: String },
+  beat: { type: String },
   gstin: { type: String },
   drugLicense: { type: String },
   licenseExpiry: { type: Date },
