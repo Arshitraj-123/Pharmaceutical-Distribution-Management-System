@@ -7,7 +7,8 @@ const CompanySchema = new mongoose.Schema({
   contactPerson: { type: String },
   phone: { type: String },
   email: { type: String },
-  totalPurchaseMTD: { type: Number, default: 0 }
+  totalPurchaseMTD: { type: Number, default: 0 },
+  outstandingBalance: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Company', CompanySchema);

@@ -3,9 +3,9 @@ export const NAV_SECTIONS = [
         label: "Operations",
         items: [
             { id: "dashboard", label: "Dashboard", icon: "ti-layout-dashboard" },
-            { id: "orders", label: "Orders", icon: "ti-shopping-cart", badge: 12 },
-            { id: "inventory", label: "Inventory", icon: "ti-package", badge: 4 },
-            { id: "delivery", label: "Delivery", icon: "ti-truck-delivery", badge: 3 },
+            { id: "orders", label: "Orders", icon: "ti-shopping-cart" },
+            { id: "inventory", label: "Inventory", icon: "ti-package" },
+            { id: "delivery", label: "Delivery", icon: "ti-truck-delivery" },
         ]
     },
     {
@@ -19,8 +19,8 @@ export const NAV_SECTIONS = [
     {
         label: "Finance & Compliance",
         items: [
-            { id: "billing", label: "Billing & GST", icon: "ti-file-invoice", badge: 7 },
-            { id: "compliance", label: "Compliance", icon: "ti-shield-check", badge: 3 },
+            { id: "billing", label: "Billing & GST", icon: "ti-file-invoice" },
+            { id: "compliance", label: "Compliance", icon: "ti-shield-check" },
             { id: "reports", label: "Reports & MIS", icon: "ti-chart-bar" },
         ]
     },

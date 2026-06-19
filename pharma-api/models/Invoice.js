@@ -2,8 +2,22 @@ const mongoose = require('mongoose');
 
 const InvoiceSchema = new mongoose.Schema({
   invoiceNo: { type: String, required: true, unique: true },
-  orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
+  orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, unique: true },
   retailerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Retailer', required: true },
+  lineItems: [{
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+    productName: String,
+    hsnCode: String,
+    batchNo: String,
+    expiryDate: Date,
+    qty: Number,
+    rate: Number,
+    taxableAmount: Number,
+    gstRate: Number,
+    cgst: Number,
+    sgst: Number,
+    lineTotal: Number
+  }],
   totalTaxable: { type: Number, required: true },
   cgst: { type: Number, default: 0 },
   sgst: { type: Number, default: 0 },

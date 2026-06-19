@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { B } from '../theme.js';
 import { PageHeader, Card, EmptyState, DataTable, StatusBadge } from '../components/ui.jsx';
 import { NewUserModal } from '../components/modals.jsx';
+import api from '../api/axios.js';
 
 // Custom Toggle Component
 const CustomToggle = ({ enabled, setEnabled }) => (
@@ -10,11 +11,37 @@ const CustomToggle = ({ enabled, setEnabled }) => (
     </div>
 );
 
-export function SettingsPage() {
+export function SettingsPage({ currentUser }) {
+    const isAdmin = currentUser?.role === 'Super Admin' || currentUser?.role === 'Admin' || currentUser?.role === 'Manager' || currentUser?.role === 'Operations Manager';
+    const isManager = isAdmin;
+
     const [activeTab, setActiveTab] = useState("company");
     const [showAddUserModal, setShowAddUserModal] = useState(false);
     
-    // GST Settings State
+    // Core Data
+    const [settings, setSettings] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [toastMessage, setToastMessage] = useState(null);
+
+    const handleExport = async (endpoint, filename) => {
+        try {
+            const res = await api.get(endpoint, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("Export error:", error);
+            const errStr = error.response ? `${error.response.status} ${error.response.statusText}` : error.message;
+            showToast(`Failed: ${errStr}`);
+        }
+    };
+
+    // GST Form State
     const [gstVerified, setGstVerified] = useState(false);
     const [apiConnected, setApiConnected] = useState(false);
     const [eInvoiceEnabled, setEInvoiceEnabled] = useState(true);
@@ -22,7 +49,6 @@ export function SettingsPage() {
     const [gstrReminder, setGstrReminder] = useState(true);
     const [itcTracking, setItcTracking] = useState(true);
     const [hsnMandatory, setHsnMandatory] = useState(true);
-    const [toastMessage, setToastMessage] = useState(null);
 
     // Notification Settings State
     const [channels, setChannels] = useState({
@@ -40,12 +66,6 @@ export function SettingsPage() {
         gstrDue: { inApp: true, email: true, sms: false },
     });
     const handleChannelToggle = (key, ch) => setChannels(p => ({ ...p, [key]: { ...p[key], [ch]: !p[key][ch] } }));
-    const alertLabels = {
-        orderPlaced: "Order placed / confirmed", orderDispatched: "Order dispatched", orderDelivered: "Order delivered (POD)",
-        invoiceGenerated: "Invoice generated", paymentDue: "Payment due reminder", paymentOverdue: "Payment overdue",
-        nearExpiry: "Near-expiry stock alert", dlExpiry: "Drug License expiry (retailer)", reorderLevel: "Reorder level reached",
-        productRecall: "Product recall alert", newScheme: "New scheme launched", gstrDue: "GSTR-1 filing due"
-    };
     const [dlChips, setDlChips] = useState({ d90: true, d60: true, d30: true });
     const [reminderDays, setReminderDays] = useState({ d7: true, d3: true, d1: true });
     const [digests, setDigests] = useState({ dailySales: true, weeklyOut: true, weeklyExp: true, monthlyGst: true });
@@ -54,10 +74,103 @@ export function SettingsPage() {
     const [pwdPolicy, setPwdPolicy] = useState({
         minLen: 8, upper: true, num: true, spec: true, expiry: "90 days", reuse: 5, forceReset: true
     });
-    const [accessCtrl, setAccessCtrl] = useState({
+        const [accessCtrl, setAccessCtrl] = useState({
         timeout: "1 hour", concurrent: "2", lockout: 5, duration: "30 minutes", ipWhitelist: ""
     });
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
+    
+    // Audit Logs State
+    const [auditLogs, setAuditLogs] = useState([]);
+
+
+    // Temp Form States (populated on load)
+    const [companyForm, setCompanyForm] = useState({});
+
+    // Keep the aggregated forms for Save functionality
+    const gstForm = { eInvoiceEnabled, eWayBillEnabled, gstrReminder, itcTracking, hsnMandatory };
+    const notifForm = { channels, dlChips, reminderDays, digests };
+    const securityForm = { pwdPolicy, accessCtrl };
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                                const [setRes, usrRes, auditRes] = await Promise.all([
+                    api.get('/settings'),
+                    isManager ? api.get('/users?includeInactive=true') : { data: [] },
+                    isAdmin ? api.get('/audit-logs?limit=50') : { data: [] }
+                ]);
+                const s = setRes.data;
+                setSettings(s);
+                setUsers(usrRes.data);
+                setAuditLogs(auditRes.data);
+
+                
+                // Init forms
+                setCompanyForm({
+                    businessName: s.businessName || '',
+                    address: s.address || '',
+                    gstin: s.gstin || '',
+                    drugLicense: s.drugLicense || '',
+                    state: s.state || '',
+                    stateCode: s.stateCode || ''
+                });
+                
+                if (s.gstConfig) {
+                    if (s.gstConfig.eInvoiceEnabled !== undefined) setEInvoiceEnabled(s.gstConfig.eInvoiceEnabled);
+                    if (s.gstConfig.eWayBillEnabled !== undefined) setEWayBillEnabled(s.gstConfig.eWayBillEnabled);
+                    if (s.gstConfig.gstrReminder !== undefined) setGstrReminder(s.gstConfig.gstrReminder);
+                    if (s.gstConfig.itcTracking !== undefined) setItcTracking(s.gstConfig.itcTracking);
+                    if (s.gstConfig.hsnMandatory !== undefined) setHsnMandatory(s.gstConfig.hsnMandatory);
+                }
+                
+                if (s.notificationConfig) {
+                    if (s.notificationConfig.channels) setChannels(s.notificationConfig.channels);
+                    if (s.notificationConfig.dlChips) setDlChips(s.notificationConfig.dlChips);
+                    if (s.notificationConfig.reminderDays) setReminderDays(s.notificationConfig.reminderDays);
+                    if (s.notificationConfig.digests) setDigests(s.notificationConfig.digests);
+                }
+                
+                if (s.securityPolicy) {
+                    if (s.securityPolicy.pwdPolicy) setPwdPolicy(s.securityPolicy.pwdPolicy);
+                    if (s.securityPolicy.accessCtrl) setAccessCtrl(s.securityPolicy.accessCtrl);
+                }
+                
+            } catch (error) {
+                console.error("Error loading settings", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadData();
+    }, [isManager]);
+
+    const handleSave = async (endpoint, payloadKey, payloadData) => {
+        try {
+            await api.put(`/settings/${endpoint}`, { [payloadKey]: payloadData });
+            showToast("Settings saved successfully!");
+        } catch (error) {
+            console.error(error);
+            showToast(error.response?.data?.message || "Failed to save settings");
+        }
+    };
+
+    const deactivateUser = async (id) => {
+        if (!window.confirm("Are you sure you want to deactivate this user?")) return;
+        try {
+            await api.patch(`/users/${id}/deactivate`);
+            setUsers(users.map(u => u._id === id ? { ...u, status: 'Inactive' } : u));
+            showToast("User deactivated successfully");
+        } catch (error) {
+            console.error(error);
+            showToast("Failed to deactivate user");
+        }
+    };
+
+    const alertLabels = {
+        orderPlaced: "Order placed / confirmed", nearExpiry: "Near-expiry stock alert",
+        reorderLevel: "Stock out / Reorder level", paymentOverdue: "Payment overdue",
+        dlExpiry: "Drug License expiry"
+    };
 
     const showToast = (msg) => {
         setToastMessage(msg);
@@ -97,16 +210,40 @@ export function SettingsPage() {
                 {activeTab === "company" && (
                     <Card>
                         <div className="grid-responsive grid-2-col" style={{ marginBottom: 0 }}>
-                            {[["Company name", "Adhya Pharmex Pvt. Ltd."], ["GSTIN", "22AABCA1234Z1Z5"], ["Drug License no.", "BR/DL/DIST/2022/00001"], ["Drug License expiry", "31 Dec 2027"], ["PAN", "AABCA1234Z"], ["State", "Bihar"], ["Head office", "Patna, Bihar — 800001"], ["Phone", "+91 98765 43210"]].map(([l, v], i) => (
-                                <div key={i}>
-                                    <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>{l}</label>
-                                    <input defaultValue={v} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                                </div>
-                            ))}
-                            <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-                                <button style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Discard</button>
-                                <button style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Save changes</button>
+                            <div style={{ marginBottom: 20 }}>
+                                {loading ? <div style={{color: B.textSecondary, fontSize: 12}}>Loading...</div> : (
+                                    <>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Company name</label>
+                                            <input value={companyForm.businessName || ''} onChange={e => setCompanyForm({...companyForm, businessName: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Address</label>
+                                            <input value={companyForm.address || ''} onChange={e => setCompanyForm({...companyForm, address: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>GSTIN</label>
+                                            <input value={companyForm.gstin || ''} onChange={e => setCompanyForm({...companyForm, gstin: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Drug License no.</label>
+                                            <input value={companyForm.drugLicense || ''} onChange={e => setCompanyForm({...companyForm, drugLicense: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>State</label>
+                                            <input value={companyForm.state || ''} onChange={e => setCompanyForm({...companyForm, state: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                        <div style={{ marginBottom: 12 }}>
+                                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>State Code (GST)</label>
+                                            <input value={companyForm.stateCode || ''} onChange={e => setCompanyForm({...companyForm, stateCode: e.target.value})} style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }} />
+                                        </div>
+                                    </>
+                                )}
                             </div>
+                            <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                                <button disabled={!isManager} onClick={() => handleSave('company', 'companyForm', companyForm)} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: isManager ? B.navy : B.border, color: B.white, fontSize: 12, fontWeight: 500, cursor: isManager ? "pointer" : "not-allowed", fontFamily: "inherit" }}>Save changes</button>
+                            </div>
+
                         </div>
                     </Card>
                 )}
@@ -359,14 +496,14 @@ export function SettingsPage() {
                                 {Object.entries(alertLabels).map(([key, label], idx, arr) => (
                                     <div key={key} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: idx === arr.length - 1 ? "none" : `1px solid ${B.border}`, alignItems: "center" }}>
                                         <div style={{ fontSize: 12, fontWeight: 500, color: B.textPrimary }}>{label}</div>
-                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key].inApp} setEnabled={() => handleChannelToggle(key, 'inApp')} /></div>
-                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key].email} setEnabled={() => handleChannelToggle(key, 'email')} /></div>
-                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key].sms} setEnabled={() => handleChannelToggle(key, 'sms')} /></div>
+                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key]?.inApp || false} setEnabled={() => handleChannelToggle(key, 'inApp')} /></div>
+                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key]?.email || false} setEnabled={() => handleChannelToggle(key, 'email')} /></div>
+                                        <div style={{ display: "flex", justifyContent: "center" }}><CustomToggle enabled={channels[key]?.sms || false} setEnabled={() => handleChannelToggle(key, 'sms')} /></div>
                                     </div>
                                 ))}
                             </div>
                             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-                                <button onClick={() => showToast("Channel preferences saved successfully!")} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Save channel preferences</button>
+                                <button disabled={!isManager} onClick={() => handleSave("notifications", "notificationConfig", notifForm)} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: isManager ? B.navy : B.border, color: B.white, fontSize: 12, fontWeight: 500, cursor: isManager ? "pointer" : "not-allowed", fontFamily: "inherit" }}>Save channel preferences</button>
                             </div>
                         </Card>
 
@@ -626,7 +763,7 @@ export function SettingsPage() {
                                     <div style={{ fontSize: 14, fontWeight: 600, color: B.navy, marginBottom: 4 }}>Audit Log</div>
                                     <div style={{ fontSize: 11, color: B.textSecondary }}>System audit trail — all user actions are logged and tamper-proof</div>
                                 </div>
-                                <button style={{ padding: "6px 12px", border: `1px solid ${B.navy}`, borderRadius: 8, background: "transparent", color: B.navy, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6 }}>
+                                <button onClick={() => handleExport('/audit-logs/export', 'Audit_Logs.csv')} style={{ padding: "6px 12px", border: `1px solid ${B.navy}`, borderRadius: 8, background: "transparent", color: B.navy, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6 }}>
                                     <i className="ti ti-download" /> Export audit log
                                 </button>
                             </div>
@@ -654,20 +791,14 @@ export function SettingsPage() {
                             <div style={{ margin: "0 -24px" }}>
                                 <DataTable
                                     headers={["Timestamp", "User", "Action", "Module", "IP Address", "Status"]}
-                                    rows={[
-                                        ["16 Jun 2026 09:42 AM", "Admin (Rajesh Kumar)", "Login", "Auth", "103.21.x.x", <StatusBadge status="Success" />],
-                                        ["16 Jun 2026 09:44 AM", "Admin (Rajesh Kumar)", "Updated company info", "Settings", "103.21.x.x", <StatusBadge status="Success" />],
-                                        ["16 Jun 2026 08:15 AM", "Priya Sharma", "Generated invoice INV/26-27/0284", "Billing", "103.22.x.x", <StatusBadge status="Success" />],
-                                        ["15 Jun 2026 06:30 PM", "Sunil Yadav", "Stock adjustment SKU-003", "Inventory", "103.23.x.x", <StatusBadge status="Success" />],
-                                        ["15 Jun 2026 05:12 PM", "Unknown", "Failed login attempt", "Auth", "45.33.x.x", <StatusBadge status="Failed" />]
-                                    ].map(([ts, usr, act, mod, ip, st], i) => (
-                                        <tr key={i} style={{ borderBottom: `1px solid ${B.border}`, background: i % 2 === 0 ? B.white : B.surface }}>
-                                            <td style={{ padding: "9px 10px", fontSize: 11, color: B.textSecondary }}>{ts}</td>
-                                            <td style={{ padding: "9px 10px", fontWeight: 500 }}>{usr}</td>
-                                            <td style={{ padding: "9px 10px" }}>{act}</td>
-                                            <td style={{ padding: "9px 10px", color: B.textSecondary }}>{mod}</td>
-                                            <td style={{ padding: "9px 10px", color: B.textSecondary, fontSize: 11, fontFamily: "monospace" }}>{ip}</td>
-                                            <td style={{ padding: "9px 10px" }}>{st}</td>
+                                    rows={(auditLogs || []).map((log, i) => (
+                                        <tr key={log._id || i} style={{ borderBottom: `1px solid ${B.border}`, background: i % 2 === 0 ? B.white : B.surface }}>
+                                            <td style={{ padding: "9px 10px", fontSize: 11, color: B.textSecondary }}>{new Date(log.timestamp).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                                            <td style={{ padding: "9px 10px", fontWeight: 500 }}>{log.user}</td>
+                                            <td style={{ padding: "9px 10px" }}>{log.action}</td>
+                                            <td style={{ padding: "9px 10px", color: B.textSecondary }}>{log.module}</td>
+                                            <td style={{ padding: "9px 10px", color: B.textSecondary, fontSize: 11, fontFamily: "monospace" }}>{log.ipAddress}</td>
+                                            <td style={{ padding: "9px 10px" }}><StatusBadge status={log.status} /></td>
                                         </tr>
                                     ))}
                                 />
@@ -713,7 +844,7 @@ export function SettingsPage() {
                                     </div>
 
                                     <div style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary, marginBottom: 8 }}>Data export</div>
-                                    <button style={{ padding: "6px 12px", border: `1px solid ${B.navy}`, borderRadius: 8, background: "transparent", color: B.navy, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+                                    <button onClick={() => handleExport('/settings/export', 'Company_Data.json')} style={{ padding: "6px 12px", border: `1px solid ${B.navy}`, borderRadius: 8, background: "transparent", color: B.navy, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
                                         Export all company data
                                     </button>
                                     <div style={{ fontSize: 10, color: B.textMuted, marginTop: 6 }}>Generates a ZIP file of all records. DPDP Act Section 12 compliant.</div>

@@ -14,6 +14,15 @@ const inventoryRoutes = require('./routes/inventory');
 const retailersRoutes = require('./routes/retailers');
 const productsRoutes = require('./routes/products');
 const deliveryRoutes = require('./routes/delivery');
+const invoicesRoutes = require('./routes/invoices');
+const purchasesRoutes = require('./routes/purchases');
+const schemesRoutes = require('./routes/schemes');
+const complianceRoutes = require('./routes/compliance');
+const reportsRoutes = require('./routes/reports');
+const notificationsRoutes = require('./routes/notifications');
+const settingsRoutes = require('./routes/settings');
+const usersRoutes = require('./routes/users');
+const auditLogsRoutes = require('./routes/auditLogs');
 require('./cron/jobs');
 
 // Models
@@ -24,6 +33,10 @@ const Company = require('./models/Company');
 const Retailer = require('./models/Retailer');
 const Inventory = require('./models/Inventory');
 const Order = require('./models/Order');
+const Dispatch = require('./models/Dispatch');
+const Invoice = require('./models/Invoice');
+const Settings = require('./models/Settings');
+const { logAction } = require('./utils/audit');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
@@ -61,10 +74,41 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/retailers', retailersRoutes);
 app.use('/api/products', productsRoutes);
 app.use('/api/delivery', deliveryRoutes);
+app.use('/api/invoices', invoicesRoutes);
+app.use('/api/purchases', purchasesRoutes);
+app.use('/api/schemes', schemesRoutes);
+app.use('/api/compliance', complianceRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/audit-logs', auditLogsRoutes);
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('Connected to MongoDB Database: pharma'))
+  .then(async () => {
+    console.log('Connected to MongoDB Database: pharma');
+    
+    // Seed default settings if not exists
+    const settingsCount = await Settings.countDocuments();
+    if (settingsCount === 0) {
+      await Settings.create({
+        businessName: 'Aadhya Pharmex',
+        address: '123 Pharma Hub, Kankarbagh, Patna, Bihar 800020',
+        gstin: '10AAAAA1234A1Z5',
+        drugLicense: 'DL-BR-PAT-123456',
+        state: 'Bihar',
+        stateCode: '10',
+        bankDetails: {
+          accountName: 'Aadhya Pharmex Current A/C',
+          accountNumber: '123456789012',
+          ifsc: 'HDFC0001234',
+          bankName: 'HDFC Bank, Kankarbagh Branch'
+        }
+      });
+      console.log('Default Settings seeded.');
+    }
+  })
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Helper to generate 4 digit OTP
@@ -110,11 +154,36 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+    
+    if (user.status === 'Inactive') {
+      return res.status(401).json({ message: 'Account deactivated' });
+    }
+
+    const settings = await Settings.findOne();
+    const lockoutThreshold = settings?.securityPolicy?.failedLoginLockout || 5;
+
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      return res.status(403).json({ message: `Account locked due to too many failed attempts. Try again later.` });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      if (user.failedLoginAttempts >= lockoutThreshold) {
+        user.lockedUntil = new Date(Date.now() + 15 * 60000); // 15 mins
+        await user.save();
+        logAction({ user: email, action: 'Failed login attempt (Account locked)', module: 'Auth', ipAddress: req.ip, status: 'Failed' });
+        return res.status(403).json({ message: `Account locked due to too many failed attempts.` });
+      }
+      await user.save();
+      logAction({ user: email, action: 'Failed login attempt', module: 'Auth', ipAddress: req.ip, status: 'Failed' });
       return res.status(401).json({ message: 'Invalid credentials' });
     }
+
+    // Reset failed attempts
+    user.failedLoginAttempts = 0;
+    user.lockedUntil = null;
+    await user.save();
 
     // Generate 2FA OTP
     const otp = generateOTP();
@@ -156,9 +225,14 @@ app.post('/api/auth/login-verify', async (req, res) => {
     // Clear OTP
     await Otp.deleteMany({ email, forLogin: true });
 
+    // Fetch dynamic session timeout
+    const settings = await Settings.findOne();
+    const timeoutMins = settings?.securityPolicy?.sessionTimeout || 60;
+
     // Generate JWT
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: `${timeoutMins}m` });
     
+    logAction({ user: user.email, action: 'Login successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
     res.json({ message: 'Login successful', token, user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role } });
   } catch(error) {
     console.error(error);

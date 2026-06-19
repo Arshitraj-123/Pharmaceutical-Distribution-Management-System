@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { B } from '../theme.js';
-import { NOTIFICATIONS } from '../mockData.js';
 import api from '../api/axios';
 
 export function NewOrderModal({ onClose }) {
@@ -181,7 +180,62 @@ export function NewOrderModal({ onClose }) {
 }
 
 export function NotifPanel({ onClose }) {
-    const unread = NOTIFICATIONS.filter(n => !n.read).length;
+    const [notifications, setNotifications] = useState([]);
+    const unread = notifications.filter(n => !n.read).length;
+
+    const fetchNotifs = async () => {
+        try {
+            const res = await api.get('/notifications');
+            setNotifications(res.data);
+        } catch (err) {
+            console.error("Failed to fetch notifications", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchNotifs();
+    }, []);
+
+    const handleMarkAllRead = async () => {
+        try {
+            await api.post('/notifications/mark-all-read');
+            fetchNotifs();
+            window.dispatchEvent(new Event('notifications-read'));
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleNotifClick = async (n) => {
+        if (!n.read) {
+            try {
+                await api.patch(`/notifications/${n._id}/read`);
+                fetchNotifs();
+                window.dispatchEvent(new Event('notifications-read'));
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    };
+
+    const getIcon = (type) => {
+        switch(type) {
+            case 'Alert': return 'ti-alert-circle';
+            case 'Warning': return 'ti-alert-triangle';
+            case 'Success': return 'ti-check';
+            default: return 'ti-info-circle';
+        }
+    };
+    
+    const getColor = (type) => {
+        switch(type) {
+            case 'Alert': return B.red;
+            case 'Warning': return B.amber;
+            case 'Success': return B.green;
+            default: return B.navy;
+        }
+    };
+
     return (
         <div style={{ position: "absolute", top: 52, right: 60, width: 340, background: B.white, borderRadius: 12, border: `1px solid ${B.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 200 }}>
             <div style={{ padding: "12px 16px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -189,71 +243,110 @@ export function NotifPanel({ onClose }) {
                 {unread > 0 && <span style={{ background: B.redLight, color: B.red, fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 10 }}>{unread} unread</span>}
             </div>
             <div style={{ maxHeight: 360, overflowY: "auto" }}>
-                {NOTIFICATIONS.map((n, i) => (
-                    <div key={i} style={{ padding: "10px 16px", borderBottom: i < NOTIFICATIONS.length - 1 ? `1px solid ${B.border}` : "none", background: n.read ? B.white : B.navyLight, display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 7, background: n.color + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <i className={`ti ${n.icon}`} style={{ fontSize: 14, color: n.color }} aria-hidden="true" />
+                {notifications.length === 0 ? (
+                    <div style={{ padding: 30, textAlign: "center", color: B.textMuted, fontSize: 12 }}>No recent notifications</div>
+                ) : (
+                    notifications.map((n, i) => (
+                        <div key={n._id || i} onClick={() => handleNotifClick(n)} style={{ padding: "10px 16px", borderBottom: i < notifications.length - 1 ? `1px solid ${B.border}` : "none", background: n.read ? B.white : B.navyLight, display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 7, background: getColor(n.type) + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <i className={`ti ${getIcon(n.type)}`} style={{ fontSize: 14, color: getColor(n.type) }} aria-hidden="true" />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 12, color: B.textPrimary, lineHeight: 1.4 }}>{n.title}</div>
+                                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2, lineHeight: 1.3 }}>{n.message}</div>
+                                <div style={{ fontSize: 10, color: B.textMuted, marginTop: 4 }}>{new Date(n.createdAt).toLocaleString()}</div>
+                            </div>
+                            {!n.read && <div style={{ width: 7, height: 7, borderRadius: "50%", background: B.navyMid, marginTop: 4, flexShrink: 0 }} />}
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, color: B.textPrimary, lineHeight: 1.4 }}>{n.title}</div>
-                            <div style={{ fontSize: 10, color: B.textMuted, marginTop: 3 }}>{n.time}</div>
-                        </div>
-                        {!n.read && <div style={{ width: 7, height: 7, borderRadius: "50%", background: B.navyMid, marginTop: 4, flexShrink: 0 }} />}
-                    </div>
-                ))}
+                    ))
+                )}
             </div>
             <div style={{ padding: "10px 16px", borderTop: `1px solid ${B.border}` }}>
-                <button onClick={onClose} style={{ width: "100%", background: "none", border: "none", fontSize: 12, color: B.navyMid, cursor: "pointer", fontFamily: "inherit" }}>Mark all as read</button>
+                <button onClick={handleMarkAllRead} style={{ width: "100%", background: "none", border: "none", fontSize: 12, color: B.navyMid, cursor: "pointer", fontFamily: "inherit" }}>Mark all as read</button>
             </div>
         </div>
     );
 }
 
 export function NewStockModal({ onClose }) {
-    const [products, setProducts] = useState([]);
-    const [product, setProduct] = useState("");
-    const [batch, setBatch] = useState("");
-    const [expiry, setExpiry] = useState("");
-    const [qty, setQty] = useState("");
-    const [rack, setRack] = useState("");
-    const [ptr, setPtr] = useState("");
+    const [supplier, setSupplier] = useState("");
+    const [invoiceNo, setInvoiceNo] = useState("");
+    const [invoiceDate, setInvoiceDate] = useState("");
+    const [items, setItems] = useState([{ product: "", batch: "", expiry: "", qty: "", ptr: "", rack: "" }]);
+    const [productsList, setProductsList] = useState([]);
+    const [suppliersList, setSuppliersList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
     useEffect(() => {
-        const fetchProducts = async () => {
+        const fetchLookups = async () => {
             try {
-                const res = await api.get('/products');
-                setProducts(res.data.products || []);
+                const [prodRes, compRes] = await Promise.all([
+                    api.get('/products'),
+                    api.get('/products/companies')
+                ]);
+                setProductsList(prodRes.data.products || []);
+                setSuppliersList(compRes.data || []);
             } catch (err) {
-                console.error("Failed to load products", err);
+                console.error("Failed to load lookups", err);
+                setError("Failed to load products or suppliers.");
             }
         };
-        fetchProducts();
+        fetchLookups();
     }, []);
 
-    const selectedProduct = products.find(p => p._id === product);
+    const addItem = () => setItems([...items, { product: "", batch: "", expiry: "", qty: "", ptr: "", rack: "" }]);
+    const removeItem = i => setItems(items.filter((_, idx) => idx !== i));
+    const updateItem = (i, field, val) => {
+        const next = [...items];
+        next[i] = { ...next[i], [field]: val };
+        
+        // Auto-fill PTR if product changes
+        if (field === 'product') {
+            const p = productsList.find(prod => prod._id === val);
+            if (p && p.ptr) next[i].ptr = p.ptr.toString();
+        }
+        
+        setItems(next);
+    };
+
+    const total = items.reduce((s, it) => {
+        const v = parseFloat(it.qty || 0) * parseFloat(it.ptr || 0);
+        return s + (isNaN(v) ? 0 : v);
+    }, 0);
 
     const handleSubmit = async () => {
         setError("");
-        if (!product || !batch || !expiry || !qty || !ptr) {
-            setError("Please fill all required fields (Product, Batch, Expiry, Qty, PTR).");
+        
+        if (!supplier || !invoiceNo || !invoiceDate) {
+            setError("Please fill all supplier invoice details.");
+            return;
+        }
+
+        if (items.some(i => !i.product || !i.batch || !i.expiry || !i.qty || !i.ptr)) {
+            setError("Please fill Product, Batch, Expiry, Qty, and PTR for all rows.");
             return;
         }
 
         try {
             setLoading(true);
             const payload = {
-                productId: product,
-                batchNo: batch,
-                expiryDate: new Date(expiry + '-01'), // convert YYYY-MM to Date
-                qtyReceived: Number(qty),
-                rackLocation: rack,
-                ptr: Number(ptr)
+                supplierId: supplier,
+                supplierInvoiceNo: invoiceNo,
+                invoiceDate: new Date(invoiceDate),
+                items: items.map(it => ({
+                    productId: it.product,
+                    batchNo: it.batch,
+                    expiryDate: new Date(it.expiry + '-01'), // convert YYYY-MM to Date
+                    qtyReceived: Number(it.qty),
+                    ptr: Number(it.ptr),
+                    rackLocation: it.rack
+                }))
             };
             
             await api.post('/inventory/grn', payload);
             window.dispatchEvent(new Event('inventory-updated'));
+            window.dispatchEvent(new Event('purchases-updated'));
             onClose();
         } catch (err) {
             setError(err.response?.data?.message || "Failed to save GRN");
@@ -264,12 +357,12 @@ export function NewStockModal({ onClose }) {
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-            <div style={{ background: B.white, borderRadius: 14, width: "min(500px,95vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(800px,95vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
                 {/* Header */}
                 <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                         <div style={{ fontSize: 15, fontWeight: 500, color: B.textPrimary }}>Add stock / GRN</div>
-                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>Record incoming inventory</div>
+                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>Record incoming supplier inventory</div>
                     </div>
                     <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20, display: "flex" }} aria-label="Close">
                         <i className="ti ti-x" aria-hidden="true" />
@@ -279,56 +372,106 @@ export function NewStockModal({ onClose }) {
                 <div style={{ padding: "16px 20px" }}>
                     {error && <div style={{ marginBottom: 14, padding: "8px 12px", background: "#FFF8F8", color: B.red, fontSize: 12, borderRadius: 6, border: `1px solid #FFE5E5` }}>{error}</div>}
                     
-                    {/* Product select */}
+                    {/* Supplier Info */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: 14, marginBottom: 20 }}>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Supplier *</label>
+                            <select value={supplier} onChange={e => setSupplier(e.target.value)}
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
+                                <option value="">Select supplier…</option>
+                                {suppliersList.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Supplier Invoice No. *</label>
+                            <input type="text" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} placeholder="e.g. CI/2026/00441"
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Invoice Date *</label>
+                            <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)}
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                        </div>
+                    </div>
+
+                    {/* Items Table */}
                     <div style={{ marginBottom: 14 }}>
-                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Product *</label>
-                        <select value={product} onChange={e => {
-                            setProduct(e.target.value);
-                            const p = products.find(prod => prod._id === e.target.value);
-                            if (p && p.ptr) setPtr(p.ptr.toString());
-                        }}
-                            style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
-                            <option value="">Select product…</option>
-                            {products.map(p => <option key={p._id} value={p._id}>{p.tradeName} — {p.companyId?.name || 'Unknown'}</option>)}
-                        </select>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Batch No. *</label>
-                            <input type="text" value={batch} onChange={e => setBatch(e.target.value)} placeholder="e.g. BTH-9021"
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary }}>Received Items *</label>
+                            <button onClick={addItem} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: B.navyMid, display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+                                <i className="ti ti-plus" style={{ fontSize: 12 }} aria-hidden="true" /> Add row
+                            </button>
                         </div>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Expiry Date *</label>
-                            <input type="month" value={expiry} onChange={e => setExpiry(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                        </div>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Qty (Units) *</label>
-                            <input type="number" value={qty} onChange={e => setQty(e.target.value)} placeholder="0"
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Cost Price (PTR) *</label>
-                            <input type="number" step="0.01" value={ptr} onChange={e => setPtr(e.target.value)} placeholder="₹"
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Rack</label>
-                            <input type="text" value={rack} onChange={e => setRack(e.target.value)} placeholder="R4-A"
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                        <div style={{ border: `1px solid ${B.border}`, borderRadius: 8, overflow: "hidden" }}>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                <thead>
+                                    <tr style={{ background: B.surface, borderBottom: `1px solid ${B.border}` }}>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11 }}>Product</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 100 }}>Batch</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 110 }}>Expiry</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 70 }}>Qty</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 80 }}>PTR (₹)</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "left", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 70 }}>Rack</th>
+                                        <th style={{ padding: "7px 10px", textAlign: "right", fontWeight: 500, color: B.textSecondary, fontSize: 11, width: 80 }}>Total</th>
+                                        <th style={{ width: 32 }}></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.map((it, i) => (
+                                        <tr key={i} style={{ borderBottom: i < items.length - 1 ? `1px solid ${B.border}` : "none" }}>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <select value={it.product} onChange={e => updateItem(i, "product", e.target.value)}
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }}>
+                                                    <option value="">Select…</option>
+                                                    {productsList.map(p => <option key={p._id} value={p._id}>{p.tradeName}</option>)}
+                                                </select>
+                                            </td>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <input type="text" value={it.batch} onChange={e => updateItem(i, "batch", e.target.value)} placeholder="BTH"
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }} />
+                                            </td>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <input type="month" value={it.expiry} onChange={e => updateItem(i, "expiry", e.target.value)}
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }} />
+                                            </td>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <input type="number" value={it.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="0"
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }} />
+                                            </td>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <input type="number" value={it.ptr} onChange={e => updateItem(i, "ptr", e.target.value)} placeholder="0.00"
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }} />
+                                            </td>
+                                            <td style={{ padding: "6px 8px" }}>
+                                                <input type="text" value={it.rack} onChange={e => updateItem(i, "rack", e.target.value)} placeholder="Rack"
+                                                    style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }} />
+                                            </td>
+                                            <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 500, color: B.textPrimary }}>
+                                                ₹{(parseFloat(it.qty || 0) * parseFloat(it.ptr || 0) || 0).toFixed(2)}
+                                            </td>
+                                            <td style={{ padding: "6px 6px", textAlign: "center" }}>
+                                                {items.length > 1 && (
+                                                    <button onClick={() => removeItem(i)} style={{ background: "none", border: "none", cursor: "pointer", color: B.red, fontSize: 14, display: "flex" }} aria-label="Remove item">
+                                                        <i className="ti ti-trash" aria-hidden="true" />
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div style={{ padding: "8px 12px", borderTop: `1px solid ${B.border}`, background: B.surface, display: "flex", justifyContent: "flex-end", gap: 16 }}>
+                                <span style={{ fontSize: 11, color: B.textSecondary }}>Grand Total</span>
+                                <span style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary }}>₹{total.toFixed(2)}</span>
+                            </div>
                         </div>
                     </div>
 
                     {/* Actions */}
-                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 }}>
                         <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>Cancel</button>
                         <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
-                            {loading ? "Saving..." : "Add Stock"}
+                            {loading ? "Saving GRN..." : "Add Stock & Create Purchase"}
                         </button>
                     </div>
                 </div>
@@ -817,78 +960,45 @@ export function NewPurchaseModal({ onClose }) {
     );
 }
 
-export function NewSchemeModal({ onClose }) {
-    const [company, setCompany] = useState("");
-    const [product, setProduct] = useState("");
-    const [type, setType] = useState("");
-    const [valid, setValid] = useState("");
-
-    return (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-            <div style={{ background: B.white, borderRadius: 14, width: "min(500px,95vw)", maxHeight: "85vh", overflow: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-                {/* Header */}
-                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                        <div style={{ fontSize: 15, fontWeight: 500, color: B.textPrimary }}>Add Scheme</div>
-                        <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 2 }}>Register a new company promotion</div>
-                    </div>
-                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20, display: "flex" }} aria-label="Close">
-                        <i className="ti ti-x" aria-hidden="true" />
-                    </button>
-                </div>
-
-                <div style={{ padding: "16px 20px" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Company *</label>
-                            <select value={company} onChange={e => setCompany(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
-                                <option value="">Select company…</option>
-                                <option value="c1">Sun Pharma</option>
-                                <option value="c2">Cipla Ltd</option>
-                                <option value="c3">Mankind</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Product / Range *</label>
-                            <input type="text" value={product} onChange={e => setProduct(e.target.value)} placeholder="e.g. Volini Spray"
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                        </div>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Scheme Type *</label>
-                            <select value={type} onChange={e => setType(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
-                                <option value="">Select type…</option>
-                                <option value="t1">10+1 Free</option>
-                                <option value="t2">5% Extra Margin</option>
-                                <option value="t3">Volume Discount</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Valid Until *</label>
-                            <input type="date" value={valid} onChange={e => setValid(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
-                        </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Add Scheme</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 export function NewInvoiceModal({ onClose }) {
-    const [retailer, setRetailer] = useState("");
-    const [orderRef, setOrderRef] = useState("");
-    const [date, setDate] = useState("");
+    const [unbilledOrders, setUnbilledOrders] = useState([]);
+    const [orderId, setOrderId] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        const fetchOrders = async () => {
+            try {
+                const res = await api.get('/invoices/unbilled-orders');
+                setUnbilledOrders(res.data);
+            } catch (err) {
+                console.error("Failed to fetch unbilled orders", err);
+            }
+        };
+        fetchOrders();
+    }, []);
+
+    const selectedOrder = unbilledOrders.find(o => o._id === orderId);
+
+    const handleSubmit = async () => {
+        setError("");
+        if (!orderId) {
+            setError("Please select an order.");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await api.post('/invoices', { orderId });
+            window.dispatchEvent(new Event('invoice-added'));
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.message || "Failed to generate invoice");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
@@ -905,39 +1015,40 @@ export function NewInvoiceModal({ onClose }) {
                 </div>
 
                 <div style={{ padding: "16px 20px" }}>
+                    {error && <div style={{ marginBottom: 14, padding: "8px 12px", background: "#FFF8F8", color: B.red, fontSize: 12, borderRadius: 6, border: `1px solid #FFE5E5` }}>{error}</div>}
+                    
                     <div style={{ marginBottom: 14 }}>
-                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Retailer *</label>
-                        <select value={retailer} onChange={e => setRetailer(e.target.value)}
+                        <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Order Reference *</label>
+                        <select value={orderId} onChange={e => setOrderId(e.target.value)}
                             style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
-                            <option value="">Select retailer…</option>
-                            <option value="r1">Apollo Pharma Retail</option>
-                            <option value="r2">Shree Medicals</option>
-                            <option value="r3">Medplus</option>
-                            <option value="r4">Mahavir Medicos</option>
+                            <option value="">Select unbilled order…</option>
+                            {unbilledOrders.map(o => (
+                                <option key={o._id} value={o._id}>
+                                    {o.orderId} — {o.retailerId?.name} ({o.retailerId?.city})
+                                </option>
+                            ))}
                         </select>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
                         <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Order Reference</label>
-                            <select value={orderRef} onChange={e => setOrderRef(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit" }}>
-                                <option value="">Select order…</option>
-                                <option value="o1">ORD-2481 (Ready)</option>
-                                <option value="o2">ORD-2485 (Ready)</option>
-                            </select>
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Retailer</label>
+                            <input type="text" readOnly value={selectedOrder ? selectedOrder.retailerId?.name : ''} placeholder="Auto-filled"
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textMuted, fontFamily: "inherit", boxSizing: "border-box" }} />
                         </div>
                         <div>
-                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Invoice Date *</label>
-                            <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textPrimary, fontFamily: "inherit", boxSizing: "border-box" }} />
+                            <label style={{ fontSize: 11, fontWeight: 500, color: B.textSecondary, display: "block", marginBottom: 4 }}>Invoice Date</label>
+                            <input type="date" value={new Date().toISOString().split('T')[0]} readOnly
+                                style={{ width: "100%", height: 34, border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 12, padding: "0 10px", background: B.surface, color: B.textMuted, fontFamily: "inherit", boxSizing: "border-box" }} />
                         </div>
                     </div>
 
                     {/* Actions */}
                     <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
-                        <button onClick={onClose} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Generate Invoice</button>
+                        <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit" }}>Cancel</button>
+                        <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>
+                            {loading ? "Generating..." : "Generate Invoice"}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1418,6 +1529,402 @@ export function CompleteDispatchModal({ dispatchData, onClose }) {
                             {loading ? "Processing..." : "Confirm Completion"}
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ViewPurchaseModal({ purchase, onClose }) {
+    if (!purchase) return null;
+
+    const formatAmt = amt => `₹${Math.round(amt).toLocaleString('en-IN')}`;
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(700px,95vw)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                {/* Header */}
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: B.textPrimary }}>Purchase Details</div>
+                        <div style={{ fontSize: 12, color: B.textSecondary, marginTop: 2 }}>Supplier Invoice: <span style={{ color: B.navyMid, fontWeight: 500 }}>{purchase.supplierInvoiceNo}</span></div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20, display: "flex" }} aria-label="Close">
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 24, padding: "16px", background: B.surface, borderRadius: 8 }}>
+                        <div>
+                            <div style={{ fontSize: 11, color: B.textSecondary, marginBottom: 4 }}>Supplier</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary }}>{purchase.supplierId?.name || "Unknown"}</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 11, color: B.textSecondary, marginBottom: 4 }}>Invoice Date</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary }}>{new Date(purchase.invoiceDate).toLocaleDateString('en-IN')}</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 11, color: B.textSecondary, marginBottom: 4 }}>Received On</div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary }}>{new Date(purchase.createdAt).toLocaleDateString('en-IN')}</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: 11, color: B.textSecondary, marginBottom: 4 }}>Total Amount</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: B.navyMid }}>{formatAmt(purchase.totalAmount)}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ fontSize: 14, fontWeight: 600, color: B.textPrimary, marginBottom: 12 }}>Items Received</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                            <tr style={{ borderBottom: `1px solid ${B.border}`, color: B.textSecondary, textAlign: "left" }}>
+                                <th style={{ padding: "8px 4px", fontWeight: 500 }}>Product</th>
+                                <th style={{ padding: "8px 4px", fontWeight: 500 }}>Batch</th>
+                                <th style={{ padding: "8px 4px", fontWeight: 500 }}>Expiry</th>
+                                <th style={{ padding: "8px 4px", fontWeight: 500, textAlign: "right" }}>Qty</th>
+                                <th style={{ padding: "8px 4px", fontWeight: 500, textAlign: "right" }}>PTR</th>
+                                <th style={{ padding: "8px 4px", fontWeight: 500, textAlign: "right" }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {purchase.items?.map((item, idx) => (
+                                <tr key={idx} style={{ borderBottom: `1px solid ${B.surface}` }}>
+                                    <td style={{ padding: "10px 4px", color: B.textPrimary, fontWeight: 500 }}>{item.productId?.tradeName || "Unknown Product"}</td>
+                                    <td style={{ padding: "10px 4px", color: B.textSecondary }}>{item.batchNo}</td>
+                                    <td style={{ padding: "10px 4px", color: B.textSecondary }}>{new Date(item.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</td>
+                                    <td style={{ padding: "10px 4px", textAlign: "right", color: B.textPrimary }}>{item.qtyReceived}</td>
+                                    <td style={{ padding: "10px 4px", textAlign: "right", color: B.textPrimary }}>₹{item.ptr?.toFixed(2)}</td>
+                                    <td style={{ padding: "10px 4px", textAlign: "right", color: B.textPrimary, fontWeight: 500 }}>{formatAmt(item.lineTotal)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: "16px 20px", borderTop: `1px solid ${B.border}`, display: "flex", justifyContent: "flex-end", background: B.surface, borderRadius: "0 0 14px 14px" }}>
+                    <button onClick={onClose} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 13, fontWeight: 500, color: B.textPrimary, cursor: "pointer", fontFamily: "inherit" }}>
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function NewSchemeModal({ onClose }) {
+    const [companies, setCompanies] = useState([]);
+    const [products, setProducts] = useState([]);
+    
+    const [companyId, setCompanyId] = useState('');
+    const [productId, setProductId] = useState(''); // Empty means all products
+    const [type, setType] = useState('Free Goods');
+    const [buyQty, setBuyQty] = useState('');
+    const [freeQty, setFreeQty] = useState('');
+    const [discountPercent, setDiscountPercent] = useState('');
+    const [validUntil, setValidUntil] = useState('');
+    
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        api.get('/products/companies').then(res => setCompanies(res.data)).catch(console.error);
+    }, []);
+
+    useEffect(() => {
+        if (companyId) {
+            api.get(`/products`).then(res => {
+                const allProds = res.data.products || [];
+                setProducts(allProds.filter(p => p.companyId && p.companyId._id === companyId));
+            }).catch(console.error);
+        } else {
+            setProducts([]);
+            setProductId('');
+        }
+    }, [companyId]);
+
+    const handleSubmit = async () => {
+        if (!companyId || !validUntil || !type) return alert("Please fill required fields");
+        if (type === 'Free Goods' && (!buyQty || !freeQty)) return alert("Please enter Buy/Free quantities");
+        if (type === 'Discount' && !discountPercent) return alert("Please enter Discount Percent");
+
+        setLoading(true);
+        try {
+            await api.post('/schemes', {
+                companyId,
+                productId: productId || null,
+                type,
+                buyQty,
+                freeQty,
+                discountPercent,
+                validUntil
+            });
+            window.dispatchEvent(new Event('schemes:updated'));
+            onClose();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to create scheme");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: 450, display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                {/* Header */}
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: B.textPrimary }}>Add New Scheme</div>
+                        <div style={{ fontSize: 12, color: B.textSecondary, marginTop: 2 }}>Define promotional offer logic</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20 }}>
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Company *</label>
+                            <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }}>
+                                <option value="">Select Company...</option>
+                                {companies.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Product (Optional)</label>
+                            <select value={productId} onChange={e => setProductId(e.target.value)} disabled={!companyId} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, background: !companyId ? B.surface : B.white }}>
+                                <option value="">All Company Products</option>
+                                {products.map(p => <option key={p._id} value={p._id}>{p.tradeName}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Scheme Type *</label>
+                            <select value={type} onChange={e => setType(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }}>
+                                <option value="Free Goods">Free Goods</option>
+                                <option value="Discount">Discount</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Valid Until *</label>
+                            <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={{ width: "100%", padding: "7px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }} />
+                        </div>
+                    </div>
+
+                    <div style={{ padding: "16px", background: B.surface, borderRadius: 8 }}>
+                        {type === 'Free Goods' ? (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "center" }}>
+                                <div>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Buy Qty</label>
+                                    <input type="number" value={buyQty} onChange={e => setBuyQty(e.target.value)} placeholder="e.g. 10" style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }} />
+                                </div>
+                                <div>
+                                    <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Get Free Qty</label>
+                                    <input type="number" value={freeQty} onChange={e => setFreeQty(e.target.value)} placeholder="e.g. 1" style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }} />
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Discount Percent (%)</label>
+                                <input type="number" value={discountPercent} onChange={e => setDiscountPercent(e.target.value)} placeholder="e.g. 5" style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13 }} />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: "16px 20px", borderTop: `1px solid ${B.border}`, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+                    <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 13, color: B.textSecondary, cursor: loading ? "not-allowed" : "pointer" }}>Cancel</button>
+                    <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 13, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer" }}>
+                        {loading ? "Saving..." : "Save Scheme"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ConfirmModal({ title, message, onConfirm, onCancel, confirmText = "Confirm", confirmColor = B.navy }) {
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000 }}>
+            <div style={{ background: B.white, borderRadius: 12, width: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", overflow: "hidden" }}>
+                <div style={{ padding: "20px 24px", display: "flex", gap: 16 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: confirmColor === B.red ? "#FFF0F0" : B.navyLight, color: confirmColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <i className={`ti ${confirmColor === B.red ? 'ti-alert-triangle' : 'ti-help'}`} style={{ fontSize: 20 }} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: B.textPrimary, marginBottom: 8 }}>{title}</div>
+                        <div style={{ fontSize: 13, color: B.textSecondary, lineHeight: 1.5 }}>{message}</div>
+                    </div>
+                </div>
+                <div style={{ padding: "16px 24px", background: B.surface, borderTop: `1px solid ${B.border}`, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+                    <button onClick={onCancel} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 13, fontWeight: 500, color: B.textSecondary, cursor: "pointer" }}>Cancel</button>
+                    <button onClick={onConfirm} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: confirmColor, color: B.white, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{confirmText}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function NewRecallModal({ onClose }) {
+    const [productName, setProductName] = useState("");
+    const [batchNo, setBatchNo] = useState("");
+    const [noticeDate, setNoticeDate] = useState("");
+    const [affectedRetailersCount, setAffectedRetailersCount] = useState("");
+    const [notes, setNotes] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!productName || !batchNo || !noticeDate) return alert("Please fill required fields.");
+        try {
+            setLoading(true);
+            await api.post('/compliance/recalls', {
+                productName,
+                batchNo,
+                noticeDate,
+                affectedRetailersCount: Number(affectedRetailersCount) || 0,
+                notes
+            });
+            window.dispatchEvent(new Event('compliance:updated'));
+            onClose();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to log recall.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: 450, display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: B.red }}>Log CDSCO Recall</div>
+                        <div style={{ fontSize: 12, color: B.textSecondary, marginTop: 2 }}>Record a new product recall notice</div>
+                    </div>
+                    <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20 }}>
+                        <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                </div>
+                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Product Name *</label>
+                        <input type="text" value={productName} onChange={e => setProductName(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Batch No. *</label>
+                            <input type="text" value={batchNo} onChange={e => setBatchNo(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                        </div>
+                        <div>
+                            <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>CDSCO Notice Date *</label>
+                            <input type="date" value={noticeDate} onChange={e => setNoticeDate(e.target.value)} style={{ width: "100%", padding: "7px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                        </div>
+                    </div>
+                    <div>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Affected Retailers (Count)</label>
+                        <input type="number" value={affectedRetailersCount} onChange={e => setAffectedRetailersCount(e.target.value)} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: B.textSecondary, marginBottom: 6 }}>Internal Notes / Actions Taken</label>
+                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} style={{ width: "100%", padding: "8px 12px", border: `1px solid ${B.border}`, borderRadius: 8, fontSize: 13, boxSizing: "border-box", fontFamily: "inherit" }} />
+                    </div>
+                </div>
+                <div style={{ padding: "16px 20px", borderTop: `1px solid ${B.border}`, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+                    <button onClick={onClose} disabled={loading} style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 13, color: B.textSecondary, cursor: "pointer" }}>Cancel</button>
+                    <button onClick={handleSubmit} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.red, color: B.white, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                        {loading ? "Saving..." : "Log Alert"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function ScheduleXRegisterModal({ onClose }) {
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get('/compliance/schedule-x-register')
+           .then(res => setRows(res.data))
+           .catch(console.error)
+           .finally(() => setLoading(false));
+    }, []);
+
+    const handleDownload = async () => {
+        try {
+            const res = await api.get('/compliance/schedule-x-register/pdf', { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'Schedule_X_Register.pdf');
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            console.error("Failed to download PDF", err);
+            alert("Failed to download PDF");
+        }
+    };
+
+    return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+            <div style={{ background: B.white, borderRadius: 14, width: "min(900px, 95vw)", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${B.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: B.textPrimary }}>Schedule X Register</div>
+                        <div style={{ fontSize: 12, color: B.textSecondary, marginTop: 2 }}>Legal transaction register for narcotic and psychotropic substances</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                        <button onClick={handleDownload} style={{ padding: "6px 12px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, fontWeight: 500, color: B.navyMid, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                            <i className="ti ti-download" /> Export PDF
+                        </button>
+                        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: B.textMuted, fontSize: 20 }}>
+                            <i className="ti ti-x" aria-hidden="true" />
+                        </button>
+                    </div>
+                </div>
+                
+                <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
+                    {loading ? (
+                        <div style={{ textAlign: "center", padding: "40px" }}><i className="ti ti-loader" style={{ fontSize: 24, animation: "spin 1s linear infinite" }} /></div>
+                    ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead>
+                                <tr style={{ borderBottom: `1px solid ${B.border}`, color: B.textSecondary, textAlign: "left" }}>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Date</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Retailer</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>DL No.</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Product</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Batch</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Qty</th>
+                                    <th style={{ padding: "8px 4px", fontWeight: 500 }}>Order Ref</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.length === 0 ? (
+                                    <tr><td colSpan={7} style={{ padding: 20, textAlign: "center", color: B.textMuted }}>No Schedule X transactions found.</td></tr>
+                                ) : rows.map((r, i) => (
+                                    <tr key={i} style={{ borderBottom: `1px solid ${B.surface}` }}>
+                                        <td style={{ padding: "10px 4px", color: B.textPrimary }}>{new Date(r.date).toLocaleDateString('en-GB')}</td>
+                                        <td style={{ padding: "10px 4px", color: B.navyMid, fontWeight: 500 }}>{r.retailerName}</td>
+                                        <td style={{ padding: "10px 4px", color: B.textSecondary }}>{r.drugLicense || 'N/A'}</td>
+                                        <td style={{ padding: "10px 4px", color: B.textPrimary }}>{r.product}</td>
+                                        <td style={{ padding: "10px 4px", color: B.textSecondary }}>{r.batchNo || '-'}</td>
+                                        <td style={{ padding: "10px 4px", color: B.textPrimary, fontWeight: 600 }}>{r.qtySupplied}</td>
+                                        <td style={{ padding: "10px 4px", color: B.textMuted, fontSize: 11 }}>{r.orderRef}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
         </div>

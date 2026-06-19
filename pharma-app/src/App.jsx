@@ -57,12 +57,12 @@ export default function App() {
         inventory: <InventoryPage showModal={() => setShowStockModal(true)} />,
         delivery: <DeliveryPage showModal={() => setShowDispatchModal(true)} />,
         retailers: <RetailersPage showModal={() => setShowRetailerModal(true)} />,
-        purchase: <PurchasePage showModal={() => setShowPurchaseModal(true)} />,
+        purchase: <PurchasePage showModal={() => setShowStockModal(true)} />,
         schemes: <SchemesPage showModal={() => setShowSchemeModal(true)} />,
         billing: <BillingPage showModal={() => setShowInvoiceModal(true)} />,
         compliance: <CompliancePage />,
         reports: <ReportsPage />,
-        settings: <SettingsPage />,
+        settings: <SettingsPage currentUser={currentUser} />,
         "edit-profile": <EditProfilePage setPage={setPage} currentUser={currentUser} />,
     };
 

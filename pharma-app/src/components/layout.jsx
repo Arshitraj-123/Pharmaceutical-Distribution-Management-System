@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { B } from '../theme.js';
 import { NAV_SECTIONS } from '../navConfig.js';
-import { NOTIFICATIONS } from '../mockData.js';
+import api from '../api/axios';
 
 export function Sidebar({ active, setActive, collapsed, setCollapsed, sidebarOpen, onLogout }) {
     return (
@@ -47,7 +47,26 @@ export function Sidebar({ active, setActive, collapsed, setCollapsed, sidebarOpe
 
 export function Header({ page, onBell, showBell, onMenu, currentUser, onEditProfile, onLogout }) {
     const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-    const unread = NOTIFICATIONS.filter(n => !n.read).length;
+    const [unread, setUnread] = useState(0);
+
+    const fetchUnread = async () => {
+        try {
+            const res = await api.get('/notifications');
+            setUnread(res.data.filter(n => !n.read).length);
+        } catch (err) {
+            console.error("Failed to fetch notifications count", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchUnread();
+        window.addEventListener('notifications-read', fetchUnread);
+        const interval = setInterval(fetchUnread, 30000); // refresh every 30s
+        return () => {
+            window.removeEventListener('notifications-read', fetchUnread);
+            clearInterval(interval);
+        };
+    }, []);
     return (
         <div style={{ height: 54, background: B.white, borderBottom: `1px solid ${B.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", gap: 12, flexShrink: 0, position: "relative", zIndex: 100 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>

@@ -18,4 +18,16 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/products/companies - Get suppliers list
+router.get('/companies', async (req, res) => {
+  try {
+    const Company = require('../models/Company');
+    const companies = await Company.find({}).sort({ name: 1 });
+    res.json(companies);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching companies' });
+  }
+});
+
 module.exports = router;

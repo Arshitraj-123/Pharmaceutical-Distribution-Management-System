@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import api from '../api/axios.js';
 import { B } from '../theme.js';
 import { PageHeader, Card, StatusBadge } from '../components/ui.jsx';
 
@@ -20,9 +21,56 @@ export function EditProfilePage({ setPage, currentUser }) {
     // Security states
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
 
-    const handleSave = () => {
-        setToastVisible(true);
-        setTimeout(() => setToastVisible(false), 3000);
+    const [loading, setLoading] = useState(false);
+    const [toastMessage, setToastMessage] = useState(null);
+
+    const showToast = (msg, type = 'success') => {
+        setToastMessage({ msg, type });
+        setTimeout(() => setToastMessage(null), 3000);
+    };
+
+    const handleSave = async (isPasswordUpdate = false) => {
+        if (!currentPassword) {
+            showToast("Please enter your current password in the Account Security section below to authorize these changes.", "error");
+            return;
+        }
+        if (isPasswordUpdate && newPassword !== confirmPassword) {
+            showToast("New passwords do not match", "error");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const payload = {
+                fullName,
+                email: workEmail,
+                phone,
+                branch,
+                currentPassword
+            };
+            if (isPasswordUpdate && newPassword) {
+                payload.newPassword = newPassword;
+            }
+            
+            const res = await api.put('/users/profile', payload);
+            
+            // Update local storage so Header picks it up after refresh or if we had a set user context
+            const updatedUser = res.data;
+            localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+            
+            showToast("Profile updated successfully!");
+            
+            if (isPasswordUpdate) {
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+            }
+        } catch (error) {
+            console.error(error);
+            showToast(error.response?.data?.message || "Failed to update profile", "error");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Password strength logic
@@ -129,7 +177,7 @@ export function EditProfilePage({ setPage, currentUser }) {
                     
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
                         <button style={{ padding: "8px 16px", border: `1px solid ${B.border}`, borderRadius: 8, background: B.white, fontSize: 12, color: B.textSecondary, cursor: "pointer", fontFamily: "inherit" }}>Discard</button>
-                        <button onClick={handleSave} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Save changes</button>
+                        <button onClick={() => handleSave(false)} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>{loading ? 'Saving...' : 'Save changes'}</button>
                     </div>
                 </Card>
 
@@ -171,7 +219,7 @@ export function EditProfilePage({ setPage, currentUser }) {
                         <div style={{ fontSize: 11, color: B.textMuted, marginBottom: 12 }}>
                             Min 8 chars · 1 uppercase · 1 number · 1 special character · Cannot reuse last 5 passwords
                         </div>
-                        <button style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Update password</button>
+                        <button onClick={() => handleSave(true)} disabled={loading} style={{ padding: "8px 16px", border: "none", borderRadius: 8, background: B.navy, color: B.white, fontSize: 12, fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: loading ? 0.7 : 1 }}>{loading ? 'Updating...' : 'Update password'}</button>
                     </div>
 
                     <div style={{ height: 1, background: B.border, margin: '24px 0' }} />
@@ -240,18 +288,18 @@ export function EditProfilePage({ setPage, currentUser }) {
             </div>
 
             {/* Toast Notification */}
-            {toastVisible && (
+            {toastMessage && (
                 <div style={{
-                    position: 'fixed', bottom: 24, right: 24, background: B.white, borderLeft: `4px solid ${B.green}`,
+                    position: 'fixed', bottom: 24, right: 24, background: B.white, borderLeft: `4px solid ${toastMessage.type === 'error' ? B.red : B.green}`,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.1)', borderRadius: 8, padding: '12px 16px', zIndex: 9999,
                     display: 'flex', alignItems: 'center', gap: 10, animation: 'slideIn 0.3s ease-out'
                 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: `${B.green}22`, color: B.green, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <i className="ti ti-check" style={{ fontSize: 14 }} />
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: toastMessage.type === 'error' ? `${B.red}22` : `${B.green}22`, color: toastMessage.type === 'error' ? B.red : B.green, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <i className={toastMessage.type === 'error' ? "ti ti-x" : "ti ti-check"} style={{ fontSize: 14 }} />
                     </div>
                     <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: B.textPrimary }}>Profile updated</div>
-                        <div style={{ fontSize: 11, color: B.textSecondary }}>Your changes have been saved successfully.</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: B.textPrimary }}>{toastMessage.type === 'error' ? 'Error' : 'Success'}</div>
+                        <div style={{ fontSize: 11, color: B.textSecondary }}>{toastMessage.msg}</div>
                     </div>
                     <style>{`@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
                 </div>

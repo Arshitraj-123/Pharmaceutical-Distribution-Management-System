@@ -44,7 +44,8 @@ graph TD
         L[Invoices & Notifications]
         M[Users & OTP records]
         N[Dashboard cache TTL indexed]
-        O[Compound indexes on createdAt, expiryDate, licenseExpiry, status]
+        O[Settings, AuditLogs, Schemes, Recalls]
+        P[Compound indexes on createdAt, expiryDate, licenseExpiry, status]
     end
 
     %% Styles
@@ -73,9 +74,12 @@ graph TD
 ## Features
 - **Frontend App (`pharma-app`):** Built with React 19 + Vite 6. Features a beautifully styled, custom UI using `theme.js` with responsive layouts, comprehensive modals, and dynamic KPI charts. Uses a custom `useDashboardData` hook for real-time polling and WebSocket synchronization.
 - **Backend API (`pharma-api`):** Built with Node.js and Express. Connects to MongoDB via Mongoose. Protected by JWT middleware.
+- **Role-Based Access Control (RBAC):** Extensive permissions logic utilizing granular `requireRole` middleware to protect admin and manager routes.
 - **Real-Time Engine:** Uses `Socket.io` to instantly push order updates to connected clients.
 - **Background Cron Jobs:** Powered by `node-cron` to automatically compute heavy sales aggregations every 30 minutes, and to monitor expiring inventory and drug licenses every hour to generate notifications.
 - **Delivery & Logistics Module:** Full dispatch control with exact beat-to-retailer mapping, driver assignment, live KPI tracking, and granular per-order fulfillment cascades with integrated UI modals.
+- **Audit Logging & Settings:** Centralized tracking of critical actions (e.g., auth events, config updates) mapped to users, and comprehensive global settings configuration.
+- **Profile Management:** Fully integrated user profile editing with strict backend password verification requirements.
 - **Modals System:** A highly interactive experience for creating new orders, stocks, dispatches, retailers, purchases, schemes, and invoices directly from the dashboard.
 
 ## Project Structure
@@ -85,10 +89,11 @@ The repository contains two main directories:
    - `src/components/` - Reusable UI components including Layout, Charts, Modals, and standard UI elements.
    - `src/hooks/` - Contains real-time custom hooks (e.g., `useDashboardData.js`).
 2. `pharma-api/` - The Node.js/Express backend server.
-   - `models/` - 12 Mongoose schemas (User, Otp, Order, OrderItem, Product, Inventory, Retailer, Invoice, Company, Notification, DashboardCache, Dispatch).
-   - `routes/` - Specific endpoint routers (e.g., `dashboard.js`, `delivery.js`).
+   - `models/` - 18 Mongoose schemas (User, Otp, Order, OrderItem, Product, Inventory, Retailer, Invoice, Company, Notification, DashboardCache, Dispatch, AuditLog, Settings, Scheme, Recall, Purchase, Counter).
+   - `routes/` - Specific endpoint routers (e.g., `dashboard.js`, `delivery.js`, `auditLogs.js`, `settings.js`, `users.js`).
    - `cron/` - Background schedule definitions.
-   - `middleware/` - JWT authentication guards.
+   - `middleware/` - JWT authentication guards and RBAC (`requireRole.js`).
+   - `utils/` - Utility functions (e.g., `audit.js`).
    - `server.js` - Main Express/Socket.io server entry point.
 
 ## Tech Stack

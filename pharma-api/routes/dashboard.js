@@ -183,4 +183,28 @@ router.get('/sales/by-company', async (req, res) => {
   }
 });
 
+// GET /api/dashboard/monthly-sales
+router.get('/monthly-sales', async (req, res) => {
+  try {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const fyStartYear = currentMonth >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const startDate = new Date(fyStartYear, 3, 1); // April 1st
+
+    const monthlySales = await Order.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $group: { 
+          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } }, 
+          sales: { $sum: "$totalValue" } 
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json(monthlySales);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error fetching monthly sales' });
+  }
+});
+
 module.exports = router;

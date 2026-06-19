@@ -9,6 +9,7 @@ export function useDashboardData(token) {
   const [sales, setSales] = useState(null);
   const [topProducts, setTopProducts] = useState(null);
   const [salesByCompany, setSalesByCompany] = useState(null);
+  const [monthlySales, setMonthlySales] = useState(null);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -28,6 +29,7 @@ export function useDashboardData(token) {
   const fetchSales = useCallback(() => fetchEndpoint('/sales', setSales), [token]);
   const fetchTopProducts = useCallback(() => fetchEndpoint('/top-products', setTopProducts), [token]);
   const fetchSalesByCompany = useCallback(() => fetchEndpoint('/sales/by-company', setSalesByCompany), [token]);
+  const fetchMonthlySales = useCallback(() => fetchEndpoint('/monthly-sales', setMonthlySales), [token]);
 
   const fetchAll = useCallback(async () => {
     if (!token) return;
@@ -39,7 +41,8 @@ export function useDashboardData(token) {
         fetchAlerts(),
         fetchSales(),
         fetchTopProducts(),
-        fetchSalesByCompany()
+        fetchSalesByCompany(),
+        fetchMonthlySales()
       ]);
     } catch (err) {
       console.error(err);
@@ -47,7 +50,7 @@ export function useDashboardData(token) {
     } finally {
       setLoading(false);
     }
-  }, [fetchKpis, fetchAlerts, fetchSales, fetchTopProducts, fetchSalesByCompany, token]);
+  }, [fetchKpis, fetchAlerts, fetchSales, fetchTopProducts, fetchSalesByCompany, fetchMonthlySales, token]);
 
   useEffect(() => {
     fetchAll();
@@ -74,9 +77,12 @@ export function useDashboardData(token) {
     });
 
     socket.on('dashboard:refresh-kpis', () => {
-      console.log('Real-time event received: refreshing KPIs');
+      console.log('Real-time event received: refreshing KPIs & Charts');
       safePoll(fetchKpis);
       safePoll(fetchTopProducts);
+      safePoll(fetchSales);
+      safePoll(fetchSalesByCompany);
+      safePoll(fetchMonthlySales);
     });
 
     return () => {
@@ -86,5 +92,5 @@ export function useDashboardData(token) {
     };
   }, [fetchAll, fetchKpis, fetchAlerts, fetchTopProducts, token]);
 
-  return { kpis, alerts, sales, topProducts, salesByCompany, loading, error, refetch: fetchAll };
+  return { kpis, alerts, sales, topProducts, salesByCompany, monthlySales, loading, error, refetch: fetchAll };
 }
