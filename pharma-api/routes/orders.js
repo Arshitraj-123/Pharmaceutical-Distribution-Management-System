@@ -6,11 +6,21 @@ const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
 const Inventory = require('../models/Inventory');
 const Retailer = require('../models/Retailer');
+const { body } = require('express-validator');
+const { validate } = require('../middleware/validate');
 
 router.use(verifyToken);
 
 // 1. POST /api/orders - Create order
-router.post('/', async (req, res) => {
+router.post('/', [
+  body('retailerId').isMongoId().withMessage('Invalid retailer ID'),
+  body('items').isArray({ min: 1 }).withMessage('Order must have at least one item'),
+  body('items.*.productId').isMongoId().withMessage('Invalid product ID'),
+  body('items.*.qtyOrdered').isInt({ gt: 0 }).withMessage('Quantity must be positive'),
+  body('items.*.rate').isFloat({ min: 0 }).withMessage('Rate must be non-negative'),
+  body('items.*.discount').optional().isFloat({ min: 0 }),
+  body('items.*.gstRate').optional().isFloat({ min: 0 })
+], validate, async (req, res) => {
   try {
     const { retailerId, items, paymentMode } = req.body;
 
@@ -139,7 +149,9 @@ router.post('/', async (req, res) => {
 });
 
 // 2. PATCH /api/orders/:id/status - Update order status
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', [
+  body('status').isIn(['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold']).withMessage('Invalid status')
+], validate, async (req, res) => {
   try {
     const { status } = req.body;
     const validStatuses = ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold'];

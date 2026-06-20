@@ -7,6 +7,8 @@ const Counter = require('../models/Counter');
 const Settings = require('../models/Settings');
 const { verifyToken } = require('../middleware/auth');
 const { logAction } = require('../utils/audit');
+const { body } = require('express-validator');
+const { validate } = require('../middleware/validate');
 
 // Apply auth middleware to all invoice routes
 router.use(verifyToken);
@@ -93,7 +95,9 @@ router.get('/gstr1-export', async (req, res) => {
 });
 
 // POST /api/invoices
-router.post('/', async (req, res) => {
+router.post('/', [
+  body('orderId').isMongoId().withMessage('Invalid order ID')
+], validate, async (req, res) => {
   try {
     const { orderId } = req.body;
     

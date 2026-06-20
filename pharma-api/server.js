@@ -1,11 +1,21 @@
 require('dotenv').config();
+
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET', 'PORT', 'NODE_ENV'];
+const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+if (missingVars.length > 0) {
+    console.error(`CRITICAL ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
+    process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const http = require('http');
 const { Server } = require('socket.io');
+const rateLimit = require('express-rate-limit');
 
 // Routes & Cron
 const dashboardRoutes = require('./routes/dashboard');
@@ -60,7 +70,8 @@ io.use((socket, next) => {
   });
 });
 
-app.use(cors());
+app.use(helmet());
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -83,6 +94,12 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', err);
+  res.status(500).json({ code: 'SERVER_ERROR', message: err.message });
+});
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI)
@@ -113,6 +130,14 @@ mongoose.connect(MONGO_URI)
 
 // Helper to generate 4 digit OTP
 const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per `window` (here, per 15 minutes)
+  message: { message: 'Too many authentication attempts from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // 1. REGISTER
 app.post('/api/auth/register', async (req, res) => {
@@ -146,7 +171,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // 2. LOGIN (Step 1: Check credentials and send OTP)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   
   try {
@@ -187,9 +212,10 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Generate 2FA OTP
     const otp = generateOTP();
+    const hashedOtp = await bcrypt.hash(otp, 12);
     
     // Create OTP document (TTL index handles expiration)
-    await Otp.create({ email, otp, forLogin: true });
+    await Otp.create({ email, otp: hashedOtp, forLogin: true });
     
     console.log(`\n========================================`);
     console.log(`[LOGIN 2FA OTP]`);
@@ -205,7 +231,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // 2b. LOGIN VERIFY (Step 2: Verify OTP and return JWT)
-app.post('/api/auth/login-verify', async (req, res) => {
+app.post('/api/auth/login-verify', authLimiter, async (req, res) => {
   const { email, otp } = req.body;
   
   try {
@@ -216,7 +242,8 @@ app.post('/api/auth/login-verify', async (req, res) => {
       return res.status(400).json({ message: 'OTP has expired or no active session. Please log in again.' });
     }
 
-    if (record.otp !== otp) {
+    const isMatch = await bcrypt.compare(otp, record.otp);
+    if (!isMatch) {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
@@ -241,7 +268,7 @@ app.post('/api/auth/login-verify', async (req, res) => {
 });
 
 // 3. FORGOT PASSWORD (Request OTP)
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   const { email, type } = req.body; 
   
   try {
@@ -251,7 +278,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 
     const otp = generateOTP();
-    await Otp.create({ email, otp, forLogin: false });
+    const hashedOtp = await bcrypt.hash(otp, 12);
+    await Otp.create({ email, otp: hashedOtp, forLogin: false });
     
     console.log(`\n========================================`);
     console.log(`[SIMULATED ${type ? type.toUpperCase() : 'EMAIL'} OTP DISPATCH]`);
@@ -277,7 +305,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       return res.status(400).json({ message: 'OTP has expired or was not requested.' });
     }
 
-    if (record.otp !== otp) {
+    const isMatch = await bcrypt.compare(otp, record.otp);
+    if (!isMatch) {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 

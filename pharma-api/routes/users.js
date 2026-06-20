@@ -5,6 +5,8 @@ const { verifyToken } = require('../middleware/auth');
 const { requireRole } = require('../middleware/requireRole');
 const User = require('../models/User');
 const { logAction } = require('../utils/audit');
+const { body } = require('express-validator');
+const { validate } = require('../middleware/validate');
 
 router.use(verifyToken);
 router.use(requireRole('Super Admin', 'Admin', 'Manager', 'Operations Manager'));
@@ -22,7 +24,10 @@ router.get('/', async (req, res) => {
 });
 
 // PUT /api/users/profile
-router.put('/profile', async (req, res) => {
+router.put('/profile', [
+  body('email').optional().isEmail().withMessage('Invalid email format'),
+  body('currentPassword').notEmpty().withMessage('Current password is required to save changes')
+], validate, async (req, res) => {
   try {
     const { fullName, email, phone, branch, currentPassword, newPassword } = req.body;
     
@@ -65,7 +70,11 @@ router.put('/profile', async (req, res) => {
 });
 
 // POST /api/users
-router.post('/', async (req, res) => {
+router.post('/', [
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('fullName').notEmpty().withMessage('Full name is required'),
+  body('role').notEmpty().withMessage('Role is required')
+], validate, async (req, res) => {
   try {
     const { fullName, email, password, empId, role, branch } = req.body;
     
@@ -95,7 +104,11 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', [
+  body('fullName').optional().notEmpty().withMessage('Full name cannot be empty'),
+  body('role').optional().notEmpty().withMessage('Role cannot be empty'),
+  body('status').optional().isIn(['Active', 'Inactive']).withMessage('Invalid status')
+], validate, async (req, res) => {
   try {
     const { fullName, role, branch, status } = req.body;
     const user = await User.findByIdAndUpdate(

@@ -13,17 +13,21 @@ const AuditLog = require('../models/AuditLog');
  * @param {Object} options.details Additional metadata
  */
 const logAction = ({ user, action, module, ipAddress, status = 'Success', details = {} }) => {
-    // Fire and forget, catch errors internally to prevent crashing the main flow
-    AuditLog.create({
-        user: user || 'Unknown',
-        action,
-        module,
-        ipAddress: ipAddress || 'Unknown',
-        status,
-        details
-    }).catch(err => {
-        console.error('Failed to write audit log:', err);
-    });
+    try {
+        // Fire and forget, catch errors internally to prevent crashing the main flow
+        AuditLog.create({
+            user: user || 'Unknown',
+            action,
+            module,
+            ipAddress: ipAddress || 'Unknown',
+            status,
+            details
+        }).catch(err => {
+            console.error('Failed to write audit log (async):', err);
+        });
+    } catch (err) {
+        console.error('Failed to write audit log (sync):', err);
+    }
 };
 
 module.exports = { logAction };

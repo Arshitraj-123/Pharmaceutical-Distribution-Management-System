@@ -6,6 +6,8 @@ const Inventory = require('../models/Inventory');
 const Purchase = require('../models/Purchase');
 const Company = require('../models/Company');
 const Product = require('../models/Product');
+const { body } = require('express-validator');
+const { validate } = require('../middleware/validate');
 
 router.use(verifyToken);
 
@@ -58,7 +60,17 @@ router.get('/batches', async (req, res) => {
 });
 
 // POST /api/inventory/grn - Record new stock receipt (Multi-item GRN + Purchase + Balance)
-router.post('/grn', async (req, res) => {
+router.post('/grn', [
+  body('supplierId').isMongoId().withMessage('Invalid supplier ID'),
+  body('supplierInvoiceNo').notEmpty().withMessage('Supplier invoice number is required'),
+  body('invoiceDate').isISO8601().withMessage('Invalid invoice date'),
+  body('items').isArray({ min: 1 }).withMessage('Items must be an array with at least one item'),
+  body('items.*.productId').isMongoId().withMessage('Invalid product ID'),
+  body('items.*.batchNo').notEmpty().withMessage('Batch number is required'),
+  body('items.*.expiryDate').isISO8601().withMessage('Invalid expiry date'),
+  body('items.*.qtyReceived').isInt({ gt: 0 }).withMessage('Quantity received must be positive'),
+  body('items.*.ptr').isFloat({ min: 0 }).withMessage('PTR must be non-negative')
+], validate, async (req, res) => {
   try {
     const { supplierId, supplierInvoiceNo, invoiceDate, items } = req.body;
     
