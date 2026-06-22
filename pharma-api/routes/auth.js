@@ -99,10 +99,16 @@ router.post('/login', authLimiter, async (req, res) => {
     // Create OTP document (TTL index handles expiration)
     await Otp.create({ email, otp: hashedOtp, forLogin: true });
     
+    // For local development: print the OTP to the terminal
+    console.log(`\n============================`);
+    console.log(`[DEV OTP]: The OTP for ${email} is: ${otp}`);
+    console.log(`============================\n`);
+
     // In production, send OTP via SMS/Email integration here.
     // Console logging and returning OTP in response removed for security.
-
-    res.json({ message: 'Credentials verified, OTP sent.', step: 2 });
+    
+    // DEV MODE ONLY: returning OTP in response so it shows up in your browser console!
+    res.json({ message: 'Credentials verified, OTP sent.', step: 2, otp: otp });
   } catch(error) {
     console.error(error);
     res.status(500).json({ message: 'Server error during login' });
@@ -160,10 +166,16 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     const hashedOtp = await bcrypt.hash(otp, 12);
     await Otp.create({ email, otp: hashedOtp, forLogin: false });
     
+    // For local development: print the OTP to the terminal
+    console.log(`\n============================`);
+    console.log(`[DEV OTP - FORGOT PASSWORD]: The OTP for ${email} is: ${otp}`);
+    console.log(`============================\n`);
+
     // In production, send OTP via SMS/Email integration here.
     // Console logging and returning OTP in response removed for security.
 
-    res.json({ message: 'OTP sent successfully' });
+    // DEV MODE ONLY: returning OTP in response so it shows up in your browser console!
+    res.json({ message: 'OTP sent successfully', otp: otp });
   } catch(error) {
     console.error(error);
     res.status(500).json({ message: 'Server error during forgot password' });
