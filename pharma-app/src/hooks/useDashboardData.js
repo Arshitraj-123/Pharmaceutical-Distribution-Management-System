@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const API_URL = 'http://localhost:3000/api/dashboard';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = `${API_BASE}/api/dashboard`;
 
 export function useDashboardData(token) {
   const [kpis, setKpis] = useState(null);
@@ -64,7 +65,7 @@ export function useDashboardData(token) {
     const alertsInterval = setInterval(() => safePoll(fetchAlerts), 10 * 60 * 1000); // 10 mins
 
     // Socket.io setup with auth
-    const socket = io('http://localhost:3000', {
+    const socket = io(API_BASE, {
       auth: { token }
     });
     
