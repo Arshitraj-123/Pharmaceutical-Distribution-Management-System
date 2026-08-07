@@ -778,6 +778,12 @@ JWT_SECRET=your_super_secret_key_here
 PORT=3000
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
+DEMO_MODE=true
+```
+
+Additionally, in `pharma-app/`, you can configure `.env` with:
+```env
+VITE_API_URL=http://localhost:3000
 ```
 
 ---
@@ -791,8 +797,32 @@ On first startup, the system automatically seeds:
 | **Email** | `admin@adhyapharma.in` |
 | **Password** | `Password123!` |
 | **Role** | Admin |
+| **2FA OTP (Demo Mode)** | `1234` |
 
 > ⚠️ **Important:** Change the default password immediately after first login.
+
+---
+
+## 🚀 Production Deployment (Render & MongoDB Atlas)
+
+### 1. Database (MongoDB Atlas)
+1. Deploy a free **M0 Cluster** on MongoDB Atlas.
+2. Under **Network Access**, add `0.0.0.0/0` (Allow Access from Anywhere) to whitelist connection space.
+3. Create a Database User and obtain the Connection URI.
+4. Replace the `MONGO_URI` value in your backend `.env` (or environment group) with the Atlas connection string.
+
+### 2. Backend (Render Web Service)
+1. Create a new **Web Service** pointing to your repository.
+2. Set the **Root Directory** to `pharma-api`.
+3. Build Command: `npm install`, Start Command: `node server.js`.
+4. Configure env variables: `MONGO_URI`, `JWT_SECRET`, `NODE_ENV=production`, `DEMO_MODE=true`, `FRONTEND_URL=https://your-frontend-link.onrender.com`.
+
+### 3. Frontend (Render Static Site)
+1. Create a new **Static Site** pointing to your repository.
+2. Set the **Root Directory** to `pharma-app`.
+3. Build Command: `npm run build`, Publish Directory: `dist`.
+4. Configure env variable: `VITE_API_URL=https://your-backend-link.onrender.com`.
+5. Trigger **Manual Deploy -> Clear Cache and Deploy** to compile variables.
 
 ---
 
