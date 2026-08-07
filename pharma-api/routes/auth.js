@@ -11,7 +11,12 @@ const { logAction } = require('../utils/audit');
 const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
 
 // Helper to generate 4 digit OTP
-const generateOTP = () => Math.floor(1000 + Math.random() * 9000).toString();
+const generateOTP = () => {
+  if (process.env.DEMO_MODE !== 'false') {
+    return '1234';
+  }
+  return Math.floor(1000 + Math.random() * 9000).toString();
+};
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
