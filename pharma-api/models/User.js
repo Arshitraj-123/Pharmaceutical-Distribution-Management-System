@@ -12,7 +12,8 @@ const userSchema = new mongoose.Schema({
   deactivatedAt: { type: Date },
   deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   failedLoginAttempts: { type: Number, default: 0 },
-  lockedUntil: { type: Date }
+  lockedUntil: { type: Date },
+  retailerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Retailer' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const Settings = require('../models/Settings');
+const Retailer = require('../models/Retailer');
 const { logAction } = require('../utils/audit');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'aadhya_pharmex_super_secret_key_2026';
@@ -28,7 +29,7 @@ const authLimiter = rateLimit({
 
 // 1. REGISTER
 router.post('/register', async (req, res) => {
-  const { fullName, email, password, empId, role, branch } = req.body;
+  const { fullName, email, password, empId, role, branch, storeName, city } = req.body;
   
   if (!email || !password || !fullName) {
     return res.status(400).json({ message: 'Missing required fields' });
@@ -40,17 +41,30 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
+    let retailerId = null;
+    if (role === 'Retailer' || !role) {
+      const newRetailer = await Retailer.create({
+        name: storeName || fullName + ' Pharmacy',
+        city: city || 'Patna',
+        creditLimit: 100000,
+        outstandingBalance: 0,
+        status: 'Active'
+      });
+      retailerId = newRetailer._id;
+    }
+
     const hashedPassword = await bcrypt.hash(password, 12);
     const newUser = await User.create({
       fullName,
       email,
       password: hashedPassword,
       empId,
-      role,
-      branch
+      role: role || 'Retailer',
+      branch,
+      retailerId
     });
     
-    res.status(201).json({ message: 'Registration successful! Awaiting admin approval.', user: { id: newUser._id, email: newUser.email } });
+    res.status(201).json({ message: 'Registration successful!', user: { id: newUser._id, email: newUser.email } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error processing registration' });
@@ -147,10 +161,10 @@ router.post('/login-verify', authLimiter, async (req, res) => {
     const timeoutMins = settings?.securityPolicy?.sessionTimeout || 60;
 
     // Generate JWT
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: `${timeoutMins}m` });
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role, retailerId: user.retailerId }, JWT_SECRET, { expiresIn: `${timeoutMins}m` });
     
     logAction({ user: user.email, action: 'Login successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
-    res.json({ message: 'Login successful', token, user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role } });
+    res.json({ message: 'Login successful', token, user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role, retailerId: user.retailerId } });
   } catch(error) {
     console.error(error);
     res.status(500).json({ message: 'Server error during OTP verification' });
