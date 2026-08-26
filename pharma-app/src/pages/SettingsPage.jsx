@@ -106,6 +106,12 @@ export function SettingsPage({ currentUser }) {
                 // Init forms
                 setCompanyForm({
                     businessName: s.businessName || '',
+                    legalName: s.legalName || '',
+                    tradeName: s.tradeName || '',
+                    phone: s.phone || '',
+                    constitution: s.constitution || '',
+                    registrationNumber: s.registrationNumber || '',
+                    registrationDate: s.registrationDate || '',
                     address: s.address || '',
                     gstin: s.gstin || '',
                     drugLicense: s.drugLicense || '',

@@ -36,7 +36,7 @@ function LeftPanel({ viewMode }) {
           <LinkIcon className="h-5 w-5 text-white" />
         </div>
         <div className="flex flex-col">
-          <span className="text-xl font-bold tracking-wide text-white">Adhya Pharmex</span>
+          <span className="text-xl font-bold tracking-wide text-white">Aadya Medicine Agencies</span>
         </div>
       </div>
 
@@ -113,7 +113,7 @@ function LeftPanel({ viewMode }) {
           {viewMode === 'sso-select' && (
             <motion.div key="sso-select" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}>
               <h1 className="mb-4 text-5xl font-bold leading-tight">Enterprise <br /> Secure Access</h1>
-              <p className="mb-12 text-lg text-slate-300">Use your corporate identity to securely access the Adhya Pharmex DMS.</p>
+              <p className="mb-12 text-lg text-slate-300">Use your corporate identity to securely access the Aadya Medicine Agencies DMS.</p>
               <div className="space-y-4">
                 <div className="rounded-xl bg-white/10 p-5 border border-white/20 flex items-center gap-4">
                   <div className="bg-blue-500/20 p-3 rounded-lg"><Server className="text-blue-400" /></div>
@@ -185,7 +185,7 @@ function LeftPanel({ viewMode }) {
           {viewMode === 'forgot-reset' && (
             <motion.div key="forgot-reset" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}>
               <h1 className="mb-4 text-5xl font-bold leading-tight">Create a strong <br /> new password</h1>
-              <p className="mb-12 text-lg text-slate-300">Your new password must meet the Adhya Pharmex security policy requirements.</p>
+              <p className="mb-12 text-lg text-slate-300">Your new password must meet the Aadya Medicine Agencies security policy requirements.</p>
               <div className="space-y-3">
                 <PolicyCard title="Minimum 8 characters" sub="Longer is stronger" valid={true} />
                 <PolicyCard title="1 uppercase + 1 number" sub="Mix letters and digits" valid={true} />
@@ -213,7 +213,7 @@ function LeftPanel({ viewMode }) {
       </div>
       
       <div className="absolute bottom-8 left-12 text-sm text-teal-100/50 z-20">
-        © Adhya Pharmex 2026. All Rights Reserved
+        © Aadya Medicine Agencies 2026. All Rights Reserved
       </div>
     </div>
   );
@@ -763,7 +763,7 @@ function ForgotPasswordForms({ viewMode, setViewMode, resetEmail, setResetEmail 
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-50 text-green-500 shadow-sm border border-green-100"><CheckCircle2 className="h-10 w-10" /></div>
            <h2 className="text-2xl font-bold text-slate-900 mb-2">Password reset successful</h2>
-           <p className="text-sm text-slate-500 mb-8">Your Adhya Pharmex account password has been securely updated. All active sessions have been signed out for your security.</p>
+           <p className="text-sm text-slate-500 mb-8">Your Aadya Medicine Agencies account password has been securely updated. All active sessions have been signed out for your security.</p>
            
            <div className="space-y-3 text-left mb-8">
              <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex gap-3 text-sm text-green-800">

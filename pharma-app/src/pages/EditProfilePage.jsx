@@ -232,7 +232,7 @@ export function EditProfilePage({ setPage, currentUser }) {
                                 <StatusBadge status={twoFactorEnabled ? "Active" : "Inactive"} />
                             </div>
                             <div style={{ fontSize: 11, color: B.textSecondary, maxWidth: 400, lineHeight: 1.5 }}>
-                                Required for all Aadhya Pharmex DMS users per security policy.
+                                Required for all Aadya Medicine Agencies DMS users per security policy.
                                 {!twoFactorEnabled && <span style={{ color: B.red, display: 'block', marginTop: 4 }}>Disabling 2FA requires admin approval.</span>}
                             </div>
                         </div>

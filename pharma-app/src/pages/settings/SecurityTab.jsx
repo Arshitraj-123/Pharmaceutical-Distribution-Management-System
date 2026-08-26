@@ -112,7 +112,7 @@ export function SecurityTab({ pwdPolicy, setPwdPolicy, accessCtrl, setAccessCtrl
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                                 <div>
                                     <div style={{ fontSize: 13, fontWeight: 500, color: B.textPrimary }}>Force 2FA for all users</div>
-                                    <div style={{ fontSize: 11, color: B.textMuted }}>All Aadhya Pharmex DMS users must have 2FA enabled per security policy</div>
+                                    <div style={{ fontSize: 11, color: B.textMuted }}>All Aadya Medicine Agencies DMS users must have 2FA enabled per security policy</div>
                                 </div>
                                 <div style={{ opacity: 0.6, pointerEvents: "none" }}>
                                     <CustomToggle enabled={true} setEnabled={() => {}} />

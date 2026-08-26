@@ -10,14 +10,20 @@ const getSettings = async () => {
   return await Settings.findOneAndUpdate(
     {},
     { $setOnInsert: {
-      businessName: 'Aadhya Pharmex',
-      address: '123 Pharma Hub, Kankarbagh, Patna, Bihar 800020',
-      gstin: '10AAAAA1234A1Z5',
+      businessName: 'Aadya Medicine Agencies',
+      legalName: 'RIYA KAUSHIK',
+      tradeName: 'AADYA MEDICINE AGENCIES',
+      phone: '7217521744',
+      constitution: 'Proprietorship',
+      registrationNumber: '09MHMPK6914Q1Z5',
+      registrationDate: new Date('2026-06-06'),
+      address: 'Nagar Nigam Number 14/1679, Kishanpura, Saharanpur, Uttar Pradesh 247001',
+      gstin: '09MHMPK6914Q1Z5',
       drugLicense: 'DL-BR-PAT-123456',
-      state: 'Bihar',
-      stateCode: '10',
+      state: 'Uttar Pradesh',
+      stateCode: '09',
       bankDetails: {
-        accountName: 'Aadhya Pharmex Current A/C',
+        accountName: 'Aadya Medicine Agencies Current A/C',
         accountNumber: '123456789012',
         ifsc: 'HDFC0001234',
         bankName: 'HDFC Bank, Kankarbagh Branch'

@@ -264,8 +264,8 @@ export function ViewOrderModal({ order, autoPrint, onClose }) {
                         <p style={{ margin: "2px 0 0 0", color: B.textSecondary }}>Date: {new Date(order.createdAt).toLocaleString('en-IN')}</p>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                        <h2 style={{ margin: 0, fontSize: 18 }}>Aadhya Pharmex</h2>
-                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>Patna, Bihar</p>
+                        <h2 style={{ margin: 0, fontSize: 18 }}>Aadya Medicine Agencies</h2>
+                        <p style={{ margin: "5px 0 0 0", color: B.textSecondary }}>Saharanpur, Uttar Pradesh</p>
                     </div>
                 </div>
 

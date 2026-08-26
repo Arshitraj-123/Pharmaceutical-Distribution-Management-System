@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const SettingsSchema = new mongoose.Schema({
   businessName: { type: String, required: true },
+  legalName: { type: String },
+  tradeName: { type: String },
+  phone: { type: String },
+  constitution: { type: String },
+  registrationNumber: { type: String },
+  registrationDate: { type: Date },
   address: { type: String, required: true },
   gstin: { type: String, required: true },
   drugLicense: { type: String, required: true },
