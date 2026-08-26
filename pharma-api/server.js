@@ -106,48 +106,105 @@ mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log('Connected to MongoDB Database: pharma');
     
-    // Seed default settings if not exists
-    const settingsCount = await Settings.countDocuments();
-    if (settingsCount === 0) {
-      await Settings.create({
-        businessName: 'Aadya Medicine Agencies',
-        legalName: 'RIYA KAUSHIK',
-        tradeName: 'AADYA MEDICINE AGENCIES',
-        phone: '7217521744',
-        constitution: 'Proprietorship',
-        registrationNumber: '09MHMPK6914Q1Z5',
-        registrationDate: new Date('2026-06-06'),
-        address: 'Nagar Nigam Number 14/1679, Kishanpura, Saharanpur, Uttar Pradesh 247001',
-        gstin: '09MHMPK6914Q1Z5',
-        drugLicense: 'DL-BR-PAT-123456',
-        state: 'Uttar Pradesh',
-        stateCode: '09',
-        bankDetails: {
-          accountName: 'Aadya Medicine Agencies Current A/C',
-          accountNumber: '123456789012',
-          ifsc: 'HDFC0001234',
-          bankName: 'HDFC Bank, Kankarbagh Branch'
+    // Seed or update default settings
+    await Settings.findOneAndUpdate(
+      {},
+      {
+        $set: {
+          businessName: 'Aadya Medicine Agencies',
+          legalName: 'RIYA KAUSHIK',
+          tradeName: 'AADYA MEDICINE AGENCIES',
+          phone: '7217521744',
+          constitution: 'Proprietorship',
+          registrationNumber: '09MHMPK6914Q1Z5',
+          registrationDate: new Date('2026-06-06'),
+          address: 'Nagar Nigam Number 14/1679, Kishanpura, Saharanpur, Uttar Pradesh 247001',
+          gstin: '09MHMPK6914Q1Z5',
+          drugLicense: 'DL-BR-PAT-123456',
+          state: 'Uttar Pradesh',
+          stateCode: '09',
+        },
+        $setOnInsert: {
+          bankDetails: {
+            accountName: 'Aadya Medicine Agencies Current A/C',
+            accountNumber: '123456789012',
+            ifsc: 'HDFC0001234',
+            bankName: 'HDFC Bank, Kankarbagh Branch'
+          }
         }
-      });
-      console.log('Default Settings seeded.');
-    }
+      },
+      { upsert: true, new: true }
+    );
+    console.log('Default Settings verified & updated.');
   })
   .catch(err => console.error('MongoDB connection error:', err));
 
 const authRoutes = require('./routes/auth');
 app.use('/api/auth', authRoutes);
 
-// Initialize dummy admin if not exists
+// Initialize default Admin and Retailer users if not exist
 const initDb = async () => {
-  const admin = await User.findOne({ email: 'admin@adhyapharma.in' });
-  if (!admin) {
-    await User.create({
-      fullName: 'Admin User',
-      email: 'admin@adhyapharma.in',
-      password: bcrypt.hashSync('Password123!', 12),
-      role: 'Admin'
-    });
-    console.log('Dummy Admin user created');
+  try {
+    // 1. Admin User
+    let admin = await User.findOne({ email: 'admin@adhyapharma.in' });
+    if (!admin) {
+      admin = await User.create({
+        fullName: 'Admin User',
+        email: 'admin@adhyapharma.in',
+        password: bcrypt.hashSync('Password123!', 12),
+        role: 'Admin',
+        status: 'Active',
+        failedLoginAttempts: 0,
+        lockedUntil: null
+      });
+      console.log('Default Admin user created (admin@adhyapharma.in / Password123!)');
+    } else {
+      admin.password = bcrypt.hashSync('Password123!', 12);
+      admin.status = 'Active';
+      admin.failedLoginAttempts = 0;
+      admin.lockedUntil = null;
+      await admin.save();
+      console.log('Default Admin credentials verified and refreshed');
+    }
+
+    // 2. Retailer Profile & User (Apollo Pharmacy)
+    let retailer = await Retailer.findOne({ name: 'Apollo Pharmacy' });
+    if (!retailer) {
+      retailer = await Retailer.create({
+        name: 'Apollo Pharmacy',
+        city: 'Saharanpur',
+        creditLimit: 200000,
+        outstandingBalance: 0,
+        status: 'Active'
+      });
+      console.log('Default Retailer profile created: Apollo Pharmacy');
+    }
+
+    let retailerUser = await User.findOne({ email: 'retailer@adhyapharma.in' });
+    if (!retailerUser) {
+      retailerUser = await User.create({
+        fullName: 'Apollo Retailer',
+        email: 'retailer@adhyapharma.in',
+        password: bcrypt.hashSync('Password123!', 12),
+        role: 'Retailer',
+        status: 'Active',
+        retailerId: retailer._id,
+        failedLoginAttempts: 0,
+        lockedUntil: null
+      });
+      console.log('Default Retailer user created (retailer@adhyapharma.in / Password123!)');
+    } else {
+      retailerUser.password = bcrypt.hashSync('Password123!', 12);
+      retailerUser.role = 'Retailer';
+      retailerUser.status = 'Active';
+      retailerUser.retailerId = retailer._id;
+      retailerUser.failedLoginAttempts = 0;
+      retailerUser.lockedUntil = null;
+      await retailerUser.save();
+      console.log('Default Retailer credentials verified and refreshed');
+    }
+  } catch (err) {
+    console.error('Error during initDb database seeding:', err);
   }
 };
 
