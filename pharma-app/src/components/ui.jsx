@@ -57,22 +57,25 @@ export function KPICard({ icon, label, value, sub, subColor, accent, onClick }) 
     );
 }
 
-export function PageHeader({ title, subtitle, action, onAction }) {
+export function PageHeader({ title, subtitle, action, onAction, extraActions }) {
     return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem", flexWrap: "wrap", gap: 10 }}>
             <div>
                 <h2 style={{ margin: 0, fontSize: 19, fontWeight: 500, color: B.textPrimary }}>{title}</h2>
                 {subtitle && <p style={{ margin: "3px 0 0", fontSize: 12, color: B.textSecondary }}>{subtitle}</p>}
             </div>
-            {action && (
-                <button onClick={onAction} style={{
-                    background: B.navy, color: B.white, border: "none", borderRadius: 8,
-                    padding: "8px 14px", fontSize: 12, fontWeight: 500, cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit"
-                }}>
-                    <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" />{action}
-                </button>
-            )}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {extraActions}
+                {action && (
+                    <button onClick={onAction} style={{
+                        background: B.navy, color: B.white, border: "none", borderRadius: 8,
+                        padding: "8px 14px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 6, fontFamily: "inherit"
+                    }}>
+                        <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" />{action}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }

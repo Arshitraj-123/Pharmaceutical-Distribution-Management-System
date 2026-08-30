@@ -1,5 +1,6 @@
 export { NewOrderModal, UpdateOrderStatusModal, ViewOrderModal } from './OrderModals.jsx';
 export { NewStockModal, EditStockModal, ViewStockModal } from './InventoryModals.jsx';
+export { NewProductModal } from './NewProductModal.jsx';
 export { NewRetailerModal, EditRetailerModal, ViewRetailerModal, RetailerStatementModal } from './RetailerModals.jsx';
 export { NewDispatchModal, ViewDispatchModal, CompleteDispatchModal } from './DispatchModals.jsx';
 export { ProfileModal, NewUserModal } from './UserModals.jsx';

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { B } from '../theme.js';
 import { PageHeader, KPICard, Card, SearchInput, FilterChips, DataTable, StatusBadge } from '../components/ui.jsx';
-import { EditStockModal, ViewStockModal } from '../components/modals.jsx';
+import { EditStockModal, ViewStockModal, NewProductModal } from '../components/modals.jsx';
 import api from '../api/axios';
 
 export function InventoryPage({ showModal }) {
@@ -11,6 +11,7 @@ export function InventoryPage({ showModal }) {
     const [schedFilter, setSchedFilter] = useState("All");
     const [viewBatch, setViewBatch] = useState(null);
     const [editBatch, setEditBatch] = useState(null);
+    const [showNewProductModal, setShowNewProductModal] = useState(false);
     const scheds = ["All", "OTC", "H", "H1", "X"];
 
     const fetchInventory = async () => {
@@ -29,7 +30,11 @@ export function InventoryPage({ showModal }) {
         fetchInventory();
         const handleUpdate = () => fetchInventory();
         window.addEventListener('inventory-updated', handleUpdate);
-        return () => window.removeEventListener('inventory-updated', handleUpdate);
+        window.addEventListener('products-updated', handleUpdate);
+        return () => {
+            window.removeEventListener('inventory-updated', handleUpdate);
+            window.removeEventListener('products-updated', handleUpdate);
+        };
     }, []);
 
     const mappedInventory = inventory.map(item => {
@@ -71,7 +76,33 @@ export function InventoryPage({ showModal }) {
 
     return (
         <div>
-            <PageHeader title="Inventory" subtitle="Batch-level stock · FEFO allocation · expiry tracking" action="Add stock / GRN" onAction={showModal} />
+            <PageHeader
+                title="Inventory"
+                subtitle="Batch-level stock · FEFO allocation · expiry tracking"
+                action="Add stock / GRN"
+                onAction={showModal}
+                extraActions={
+                    <button
+                        onClick={() => setShowNewProductModal(true)}
+                        style={{
+                            background: "#059669",
+                            color: B.white,
+                            border: "none",
+                            borderRadius: 8,
+                            padding: "8px 14px",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontFamily: "inherit"
+                        }}
+                    >
+                        <i className="ti ti-box" style={{ fontSize: 13 }} /> Add New Product
+                    </button>
+                }
+            />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 14 }}>
                 <KPICard icon="ti-package" label="Total SKUs" value={uniqueSKUs} sub="in active stock" accent={B.navy} />
                 <KPICard icon="ti-alert-circle" label="Expiring < 30 days" value={expiring30} sub="Immediate action" accent={B.red} subColor={B.red} />
@@ -119,6 +150,12 @@ export function InventoryPage({ showModal }) {
             </Card>
             {editBatch && <EditStockModal batchData={editBatch} onClose={() => setEditBatch(null)} />}
             {viewBatch && <ViewStockModal batchData={viewBatch} onClose={() => setViewBatch(null)} />}
+            {showNewProductModal && (
+                <NewProductModal
+                    onClose={() => setShowNewProductModal(false)}
+                    onProductCreated={() => fetchInventory()}
+                />
+            )}
         </div>
     );
 }

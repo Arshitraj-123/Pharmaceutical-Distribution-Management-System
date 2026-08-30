@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { B } from '../../theme.js';
 import api from '../../api/axios';
+import { NewProductModal } from './NewProductModal.jsx';
 
 export function NewStockModal({ onClose }) {
     const [supplier, setSupplier] = useState("");
@@ -11,6 +12,8 @@ export function NewStockModal({ onClose }) {
     const [suppliersList, setSuppliersList] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [showAddNewProductModal, setShowAddNewProductModal] = useState(false);
+    const [targetRowIndex, setTargetRowIndex] = useState(null);
 
     useEffect(() => {
         const fetchLookups = async () => {
@@ -32,6 +35,12 @@ export function NewStockModal({ onClose }) {
     const addItem = () => setItems([...items, { product: "", batch: "", expiry: "", qty: "", ptr: "", rack: "" }]);
     const removeItem = i => setItems(items.filter((_, idx) => idx !== i));
     const updateItem = (i, field, val) => {
+        if (field === 'product' && val === '__NEW__') {
+            setTargetRowIndex(i);
+            setShowAddNewProductModal(true);
+            return;
+        }
+
         const next = [...items];
         next[i] = { ...next[i], [field]: val };
         
@@ -157,6 +166,7 @@ export function NewStockModal({ onClose }) {
                                                 <select value={it.product} onChange={e => updateItem(i, "product", e.target.value)}
                                                     style={{ width: "100%", height: 30, border: `1px solid ${B.border}`, borderRadius: 6, fontSize: 11, padding: "0 6px", background: B.white, fontFamily: "inherit" }}>
                                                     <option value="">Select…</option>
+                                                    <option value="__NEW__" style={{ fontWeight: 600, color: "#059669" }}>+ Add New Product...</option>
                                                     {productsList.map(p => <option key={p._id} value={p._id}>{p.tradeName}</option>)}
                                                 </select>
                                             </td>
@@ -210,6 +220,18 @@ export function NewStockModal({ onClose }) {
                     </div>
                 </div>
             </div>
+            {showAddNewProductModal && (
+                <NewProductModal
+                    onClose={() => setShowAddNewProductModal(false)}
+                    onProductCreated={(newProd) => {
+                        setProductsList(prev => [...prev, newProd]);
+                        if (targetRowIndex !== null) {
+                            updateItem(targetRowIndex, "product", newProd._id);
+                        }
+                        setShowAddNewProductModal(false);
+                    }}
+                />
+            )}
         </div>
     );
 }

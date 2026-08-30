@@ -32,8 +32,39 @@ export default function App() {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showNotif, setShowNotif] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('auth_token'));
+    const [isAuthenticated, setIsAuthenticated] = useState(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            const tokenParam = params.get('token');
+            const userParam = params.get('user');
+            if (tokenParam) {
+                localStorage.setItem('auth_token', tokenParam);
+                if (userParam) {
+                    try {
+                        localStorage.setItem('auth_user', decodeURIComponent(userParam));
+                    } catch(e) {
+                        localStorage.setItem('auth_user', userParam);
+                    }
+                }
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return true;
+            }
+        }
+        return !!localStorage.getItem('auth_token');
+    });
+
     const [currentUser, setCurrentUser] = useState(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            const userParam = params.get('user');
+            if (userParam) {
+                try {
+                    return JSON.parse(decodeURIComponent(userParam));
+                } catch(e) {
+                    try { return JSON.parse(userParam); } catch(err) {}
+                }
+            }
+        }
         try { return JSON.parse(localStorage.getItem('auth_user')) || null; }
         catch(e) { return null; }
     });

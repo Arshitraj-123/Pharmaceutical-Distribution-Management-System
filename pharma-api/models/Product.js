@@ -14,11 +14,16 @@ const ProductSchema = new mongoose.Schema({
   priceTiers: [{ 
     tier: String, 
     price: Number 
-  }]
+  }],
+  packing: { type: String },
+  description: { type: String },
+  isNewLaunch: { type: Boolean, default: true },
+  announcedAt: { type: Date, default: Date.now },
+  imageUrl: { type: String }
 }, { timestamps: true });
 
-ProductSchema.index({ sku: 1 });
 ProductSchema.index({ tradeName: 1 });
 ProductSchema.index({ companyId: 1 });
+ProductSchema.index({ isNewLaunch: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Product', ProductSchema);
