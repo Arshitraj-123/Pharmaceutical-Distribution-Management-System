@@ -17,7 +17,8 @@ const userSchema = new mongoose.Schema({
   googleId: { type: String, sparse: true, index: true },
   authProvider: { type: String, enum: ['local', 'google', 'both'], default: 'local' },
   profilePhoto: { type: String },
-  address: { type: String }
+  address: { type: String },
+  isVerified: { type: Boolean, default: true }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
