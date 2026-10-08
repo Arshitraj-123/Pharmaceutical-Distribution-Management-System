@@ -185,7 +185,7 @@ export function UpdateOrderStatusModal({ orderId, currentStatus, onClose }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const validStatuses = ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold'];
+    const validStatuses = ['Pending', 'Confirmed', 'Processing', 'Dispatched', 'Out for Delivery', 'Delivered', 'Cancelled', 'Credit Hold'];
 
     return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>

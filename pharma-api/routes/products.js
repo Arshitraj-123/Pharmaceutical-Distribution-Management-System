@@ -12,16 +12,37 @@ const { validate } = require('../middleware/validate');
 
 // ============================================================================
 // PUBLIC / RETAILER ANNOUNCEMENTS ENDPOINT
+// ============================================================================
+// PUBLIC / RETAILER ANNOUNCEMENTS ENDPOINT
 // GET /api/products/announcements
-// Note: Per Modification 1, PTR is strictly REMOVED from the announcement payload
-// to protect sensitive B2B tier pricing. Only MRP, name, category, and details are returned.
+// Note: Timer applied:
+// - 2 days (48 hours) for non-registered retailer users (guests)
+// - 1 day (24 hours) for registered retailer users
+// - When multiple new products are added, all are returned for the slide banner
 // ============================================================================
 router.get('/announcements', async (req, res) => {
   try {
-    const products = await Product.find({ isNewLaunch: true })
+    const userType = req.query.userType || (req.header('Authorization') ? 'registered' : 'guest');
+    const maxAgeHours = userType === 'registered' ? 24 : 48;
+    const cutoffDate = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+
+    const filter = {
+      isNewLaunch: true
+    };
+
+    // Unless explicitly requesting all launches without timer filter, enforce the 1-day / 2-day cutoff
+    if (req.query.ignoreTimer !== 'true') {
+      filter.$or = [
+        { announcedAt: { $gte: cutoffDate } },
+        { announcedAt: { $exists: false }, createdAt: { $gte: cutoffDate } },
+        { announcedAt: null, createdAt: { $gte: cutoffDate } }
+      ];
+    }
+
+    const products = await Product.find(filter)
       .populate('companyId', 'name')
       .sort({ announcedAt: -1, createdAt: -1 })
-      .limit(8)
+      .limit(12)
       .select('-ptr -priceTiers -costPrice');
 
     const announcements = products.map(p => ({
@@ -42,18 +63,21 @@ router.get('/announcements', async (req, res) => {
       createdAt: p.createdAt
     }));
 
-    res.json({ announcements });
+    res.json({
+      announcements,
+      userType,
+      maxAgeHours,
+      cutoffDate
+    });
   } catch (err) {
     console.error('Error fetching announcements:', err);
     res.status(500).json({ message: 'Server error fetching announcements' });
   }
 });
 
-// All subsequent routes require authentication
-router.use(verifyToken);
-
 // ============================================================================
-// GET /api/products - Get master catalog list (with company populated)
+// PUBLIC: GET /api/products - Get master catalog list (with company populated)
+// Accessible by both registered and guest retailers for browsing
 // ============================================================================
 router.get('/', async (req, res) => {
   try {
@@ -66,6 +90,32 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: 'Server error fetching products' });
   }
 });
+
+// ============================================================================
+// PUBLIC: GET /api/products/:id - Get single product details
+// ============================================================================
+router.get('/:id', async (req, res, next) => {
+  // Pass through if the id matches another subroute like "companies"
+  if (req.params.id === 'companies') return next();
+
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+    const product = await Product.findById(req.params.id)
+      .populate('companyId', 'name');
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    res.json({ product });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching product' });
+  }
+});
+
+// All subsequent routes require authentication
+router.use(verifyToken);
 
 // ============================================================================
 // GET /api/products/companies - Get suppliers list

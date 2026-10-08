@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { B } from '../theme.js';
 import { PageHeader, AlertBar, KPICard, Card, CardTitle, DataTable, StatusBadge } from '../components/ui.jsx';
+import { RazorpayCheckoutButton } from '../components/RazorpayCheckout.jsx';
 import api from '../api/axios';
 
 export function BillingPage({ showModal }) {
@@ -97,7 +98,15 @@ export function BillingPage({ showModal }) {
             </AlertBar>
 
             <Card>
-                <CardTitle>Recent invoices</CardTitle>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <CardTitle>Recent invoices</CardTitle>
+                    <RazorpayCheckoutButton
+                        amount={100}
+                        buttonText="Quick Pay (₹100)"
+                        variant="small"
+                        description="Test Razorpay Standard Checkout"
+                    />
+                </div>
                 <DataTable
                     headers={["Invoice no.", "Retailer", "Date", "Taxable amt.", "GST", "Total", "IRN status", "Actions"]}
                     rows={invoices.map((inv, i) => {
@@ -112,7 +121,16 @@ export function BillingPage({ showModal }) {
                             <td style={{ padding: "9px 10px", fontWeight: 500 }}>{formatAmt(inv.totalAmount)}</td>
                             <td style={{ padding: "9px 10px" }}><StatusBadge status={inv.irnStatus} /></td>
                             <td style={{ padding: "9px 10px" }}>
-                                <div style={{ display: "flex", gap: 8 }}>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <RazorpayCheckoutButton
+                                        variant="icon"
+                                        amount={inv.totalAmount || 100}
+                                        receipt={inv.invoiceNo}
+                                        description={`Payment for invoice ${inv.invoiceNo}`}
+                                        customerName={inv.retailerId?.name}
+                                        customerEmail={inv.retailerId?.email}
+                                        buttonText={`Pay ₹${inv.totalAmount} via Razorpay`}
+                                    />
                                     <i 
                                         className="ti ti-download" 
                                         style={{ fontSize: 15, color: B.navyMid, cursor: "pointer" }} 

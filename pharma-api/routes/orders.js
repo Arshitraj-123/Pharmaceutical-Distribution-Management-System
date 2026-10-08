@@ -11,6 +11,136 @@ const { validate } = require('../middleware/validate');
 
 router.use(verifyToken);
 
+// ── RETAILER ENDPOINTS ──────────────────────────────────────────────────
+
+// GET /api/orders/my-orders - Get orders for the authenticated retailer
+router.get('/my-orders', async (req, res) => {
+  try {
+    const retailerId = req.user.retailerId;
+    if (!retailerId) {
+      return res.status(403).json({ message: 'No retailer profile linked to this account' });
+    }
+
+    const { status, page = 1, limit = 20 } = req.query;
+    const query = { retailerId };
+    if (status && status !== 'All') {
+      query.status = status;
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate('retailerId', 'name city status')
+      .populate({
+        path: 'items',
+        populate: [
+          { path: 'productId', select: 'tradeName sku manufacturer' },
+          { path: 'batchId', select: 'batchNo expiryDate' }
+        ]
+      });
+
+    const total = await Order.countDocuments(query);
+
+    res.json({
+      orders,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching your orders' });
+  }
+});
+
+// GET /api/orders/:id/track - Get order tracking info
+router.get('/:id/track', async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .select('orderId status tracking statusHistory retailerId totalValue createdAt dispatchedAt deliveredAt cancelledAt cancelReason')
+      .populate('retailerId', 'name city');
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Ensure user can only track their own orders (or is admin)
+    const isAdmin = req.user.role === 'Admin' || req.user.role === 'Super Admin';
+    if (!isAdmin && req.user.retailerId && order.retailerId?._id?.toString() !== req.user.retailerId.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    res.json(order);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error fetching tracking info' });
+  }
+});
+
+// POST /api/orders/:id/cancel - Cancel an order (retailer or admin)
+router.post('/:id/cancel', async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Check ownership
+    const isAdmin = req.user.role === 'Admin' || req.user.role === 'Super Admin';
+    if (!isAdmin && req.user.retailerId && order.retailerId.toString() !== req.user.retailerId.toString()) {
+      return res.status(403).json({ message: 'You can only cancel your own orders' });
+    }
+
+    // Business rule: Only these statuses are cancellable
+    const cancellableStatuses = ['Pending', 'Confirmed', 'Processing', 'Credit Hold'];
+    if (!cancellableStatuses.includes(order.status)) {
+      return res.status(400).json({
+        message: `Cannot cancel order with status "${order.status}". Only orders that are Pending, Confirmed, Processing, or on Credit Hold can be cancelled.`
+      });
+    }
+
+    // Restock inventory for each OrderItem
+    const orderItems = await OrderItem.find({ orderId: order._id });
+    for (const item of orderItems) {
+      if (item.batchId) {
+        await Inventory.findByIdAndUpdate(item.batchId, {
+          $inc: { qtyAvailable: item.qtyOrdered }
+        });
+      }
+    }
+
+    // Update order
+    order.status = 'Cancelled';
+    order.cancelledAt = new Date();
+    order.cancelReason = reason || 'Cancelled by user';
+    order.cancelledBy = isAdmin ? 'Admin' : 'Retailer';
+    order.statusHistory.push({
+      status: 'Cancelled',
+      timestamp: new Date(),
+      comment: reason || 'Cancelled by user'
+    });
+    await order.save();
+
+    // Emit Socket.IO events
+    if (req.io) {
+      req.io.emit('order:status-updated', { orderId: order._id, status: 'Cancelled', order });
+      req.io.emit('orders:cancelled', { orderId: order._id, order });
+      req.io.emit('dashboard:refresh-kpis');
+    }
+
+    res.json({ message: 'Order cancelled successfully', order });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error cancelling order' });
+  }
+});
+
+// ── SHARED ENDPOINTS ────────────────────────────────────────────────────
+
 // 1. POST /api/orders - Create order
 router.post('/', [
   body('retailerId').isMongoId().withMessage('Invalid retailer ID'),
@@ -112,7 +242,8 @@ router.post('/', [
       retailerId,
       totalValue,
       paymentMode,
-      status
+      status,
+      statusHistory: [{ status, timestamp: new Date(), comment: 'Order placed' }]
     }]);
 
     // Link OrderItems to Order and save
@@ -123,10 +254,22 @@ router.post('/', [
     order.items = orderItems.map(oi => oi._id);
     await order.save();
 
-    // Emit event
+    // Fully populate order before broadcasting to Admin Dashboard
+    const populatedOrder = await Order.findById(order._id)
+      .populate('retailerId', 'name city status tier creditLimit outstandingBalance')
+      .populate({
+        path: 'items',
+        populate: [
+          { path: 'productId', select: 'tradeName sku' },
+          { path: 'batchId', select: 'batchNo expiryDate' }
+        ]
+      });
+
+    // Emit event to Admin Dashboard & connected users
     if (req.io) {
       req.io.emit('dashboard:refresh-kpis');
-      req.io.emit('orders:new', order);
+      req.io.emit('orders:new', populatedOrder || order);
+      req.io.emit('order-added');
     }
 
     res.status(statusCode).json({
@@ -148,16 +291,12 @@ router.post('/', [
   }
 });
 
-// 2. PATCH /api/orders/:id/status - Update order status
+// 2. PATCH /api/orders/:id/status - Update order status (admin)
 router.patch('/:id/status', [
-  body('status').isIn(['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold']).withMessage('Invalid status')
+  body('status').isIn(['Pending', 'Confirmed', 'Processing', 'Dispatched', 'Out for Delivery', 'Delivered', 'Cancelled', 'Credit Hold']).withMessage('Invalid status')
 ], validate, async (req, res) => {
   try {
-    const { status } = req.body;
-    const validStatuses = ['Pending', 'Confirmed', 'Dispatched', 'Delivered', 'Cancelled', 'Credit Hold'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
+    const { status, comment } = req.body;
 
     const order = await Order.findById(req.params.id);
     if (!order) {
@@ -170,16 +309,33 @@ router.patch('/:id/status', [
 
     // Validate state transition
     const allowedTransitions = {
-      'Pending': ['Confirmed', 'Cancelled'],
-      'Credit Hold': ['Pending', 'Confirmed', 'Cancelled'],
-      'Confirmed': ['Dispatched', 'Cancelled'],
-      'Dispatched': ['Delivered', 'Cancelled'],
+      'Pending': ['Confirmed', 'Processing', 'Cancelled'],
+      'Credit Hold': ['Pending', 'Confirmed', 'Processing', 'Cancelled'],
+      'Confirmed': ['Processing', 'Dispatched', 'Cancelled'],
+      'Processing': ['Dispatched', 'Cancelled'],
+      'Dispatched': ['Out for Delivery', 'Delivered', 'Cancelled'],
+      'Out for Delivery': ['Delivered'],
       'Delivered': [], // Terminal
       'Cancelled': []  // Terminal
     };
 
     if (!allowedTransitions[order.status] || !allowedTransitions[order.status].includes(status)) {
       return res.status(400).json({ message: `Invalid status transition from ${order.status} to ${status}` });
+    }
+
+    // If admin cancels, restock inventory
+    if (status === 'Cancelled') {
+      const orderItems = await OrderItem.find({ orderId: order._id });
+      for (const item of orderItems) {
+        if (item.batchId) {
+          await Inventory.findByIdAndUpdate(item.batchId, {
+            $inc: { qtyAvailable: item.qtyOrdered }
+          });
+        }
+      }
+      order.cancelledAt = new Date();
+      order.cancelReason = comment || 'Cancelled by admin';
+      order.cancelledBy = 'Admin';
     }
 
     // Guard update: ensure we only increment once when moving to Delivered
@@ -197,11 +353,19 @@ router.patch('/:id/status', [
     }
 
     order.status = status;
+    order.statusHistory.push({
+      status,
+      timestamp: new Date(),
+      comment: comment || `Status updated to ${status}`
+    });
     await order.save();
 
     if (req.io) {
       req.io.emit('dashboard:refresh-kpis');
-      req.io.emit('order:status-updated', { orderId: order._id, status });
+      req.io.emit('order:status-updated', { orderId: order._id, status, order });
+      if (status === 'Cancelled') {
+        req.io.emit('orders:cancelled', { orderId: order._id, order });
+      }
     }
 
     res.json({ message: 'Order status updated', order });

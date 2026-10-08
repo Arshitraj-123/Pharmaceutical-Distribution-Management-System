@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { B } from '../theme.js';
 import { PageHeader, KPICard, Card, SearchInput, FilterChips, DataTable, StatusBadge } from '../components/ui.jsx';
 import { UpdateOrderStatusModal, ViewOrderModal } from '../components/modals.jsx';
 import api from '../api/axios';
+import { io } from 'socket.io-client';
 
 export function OrdersPage({ showModal }) {
     const [orders, setOrders] = useState([]);
@@ -11,7 +12,8 @@ export function OrdersPage({ showModal }) {
     const [search, setSearch] = useState("");
     const [editOrder, setEditOrder] = useState(null);
     const [viewOrder, setViewOrder] = useState(null);
-    const statuses = ["All", "Pending", "Confirmed", "Dispatched", "Delivered", "Cancelled", "Credit Hold"];
+    const socketRef = useRef(null);
+    const statuses = ["All", "Pending", "Confirmed", "Processing", "Dispatched", "Out for Delivery", "Delivered", "Cancelled", "Credit Hold"];
 
     const fetchOrders = async () => {
         try {
@@ -30,7 +32,53 @@ export function OrdersPage({ showModal }) {
 
         const handleOrderAdded = () => fetchOrders();
         window.addEventListener('order-added', handleOrderAdded);
-        return () => window.removeEventListener('order-added', handleOrderAdded);
+
+        // Socket.IO connection for real-time updates
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            const socket = io(API_URL, {
+                auth: { token },
+                transports: ['websocket', 'polling']
+            });
+            socketRef.current = socket;
+
+            // When a retailer places a new order
+            socket.on('orders:new', (newOrder) => {
+                setOrders(prev => [newOrder, ...prev]);
+                // Trigger KPI refresh on dashboard
+                window.dispatchEvent(new Event('dashboard-refresh'));
+            });
+
+            // When order status is updated (by admin or retailer)
+            socket.on('order:status-updated', (data) => {
+                setOrders(prev => prev.map(o =>
+                    o._id === data.orderId ? { ...o, status: data.status, ...(data.order || {}) } : o
+                ));
+                window.dispatchEvent(new Event('dashboard-refresh'));
+            });
+
+            // When an order is cancelled (by retailer)
+            socket.on('orders:cancelled', (data) => {
+                setOrders(prev => prev.map(o =>
+                    o._id === data.orderId ? { ...o, status: 'Cancelled', ...(data.order || {}) } : o
+                ));
+                window.dispatchEvent(new Event('dashboard-refresh'));
+            });
+
+            // Dashboard KPI refresh
+            socket.on('dashboard:refresh-kpis', () => {
+                fetchOrders();
+                window.dispatchEvent(new Event('dashboard-refresh'));
+            });
+        }
+
+        return () => {
+            window.removeEventListener('order-added', handleOrderAdded);
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+            }
+        };
     }, []);
 
     const mappedOrders = orders.map(o => ({

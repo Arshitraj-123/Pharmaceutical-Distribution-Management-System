@@ -4,11 +4,94 @@ const bcrypt = require('bcryptjs');
 const { verifyToken } = require('../middleware/auth');
 const { requireRole } = require('../middleware/requireRole');
 const User = require('../models/User');
+const Retailer = require('../models/Retailer');
 const { logAction } = require('../utils/audit');
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 
+// ── PUBLIC/RETAILER ENDPOINTS (authenticated, any role) ─────────────────
 router.use(verifyToken);
+
+// GET /api/users/me - Returns full profile of authenticated user
+router.get('/me', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-password -failedLoginAttempts -lockedUntil -deactivatedAt -deactivatedBy')
+      .populate('retailerId', 'name city status tier creditLimit outstandingBalance gstin drugLicense');
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT /api/users/me - Update safe profile fields
+router.put('/me', [
+  body('fullName').optional().notEmpty().withMessage('Full name cannot be empty'),
+  body('phone').optional(),
+  body('address').optional(),
+  body('storeName').optional(),
+  body('city').optional(),
+  body('gstin').optional(),
+  body('drugLicense').optional()
+], validate, async (req, res) => {
+  try {
+    const { fullName, phone, address, profilePhoto, storeName, city, gstin, drugLicense } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (fullName) user.fullName = fullName;
+    if (phone !== undefined) user.phone = phone;
+    if (address !== undefined) user.address = address;
+    if (profilePhoto !== undefined) user.profilePhoto = profilePhoto;
+
+    await user.save();
+
+    // If user has a linked Retailer store, sync store name & city to Retailer model
+    let updatedRetailer = null;
+    if (user.retailerId) {
+      const retailerUpdates = {};
+      if (storeName && storeName.trim()) retailerUpdates.name = storeName.trim();
+      if (city && city.trim()) retailerUpdates.city = city.trim();
+      if (gstin !== undefined) retailerUpdates.gstin = gstin.trim();
+      if (drugLicense !== undefined) retailerUpdates.drugLicense = drugLicense.trim();
+
+      if (Object.keys(retailerUpdates).length > 0) {
+        updatedRetailer = await Retailer.findByIdAndUpdate(
+          user.retailerId,
+          { $set: retailerUpdates },
+          { new: true }
+        );
+
+        // Emit real-time sync to Admin Dashboard
+        if (req.io) {
+          req.io.emit('retailers-updated');
+          req.io.emit('dashboard:refresh-kpis');
+        }
+      }
+    }
+
+    const userObj = user.toObject();
+    delete userObj.password;
+    delete userObj.failedLoginAttempts;
+    delete userObj.lockedUntil;
+
+    if (updatedRetailer) {
+      userObj.retailerId = updatedRetailer;
+    }
+
+    logAction({ user: req.user.email, action: 'Updated own profile and store details', module: 'Users', ipAddress: req.ip });
+    res.json(userObj);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error updating profile' });
+  }
+});
+
+// ── ADMIN-ONLY ENDPOINTS ────────────────────────────────────────────────
 router.use(requireRole('Super Admin', 'Admin', 'Manager', 'Operations Manager'));
 
 // GET /api/users

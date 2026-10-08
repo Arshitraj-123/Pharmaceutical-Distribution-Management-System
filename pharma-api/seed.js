@@ -1,3 +1,12 @@
+// Polyfill globalThis.crypto for Node 18 compatibility
+if (typeof globalThis.crypto === 'undefined') {
+  try {
+    globalThis.crypto = require('crypto').webcrypto;
+  } catch (e) {
+    globalThis.crypto = require('crypto');
+  }
+}
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const Retailer = require('./models/Retailer');

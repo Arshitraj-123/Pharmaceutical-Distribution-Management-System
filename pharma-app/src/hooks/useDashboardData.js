@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL;
+if (!API_BASE) {
+  throw new Error('VITE_API_URL is not configured. Set it in .env or .env.production.');
+}
 const API_URL = `${API_BASE}/api/dashboard`;
 
 export function useDashboardData(token) {
