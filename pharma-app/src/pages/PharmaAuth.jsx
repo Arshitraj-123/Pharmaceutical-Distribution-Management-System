@@ -284,7 +284,14 @@ function LoginRegisterForms({ viewMode, setViewMode, onLogin }) {
         setLoading(true);
         const res = await api.post('/auth/login', { email: loginForm.email, password: loginForm.password });
         
-        // Log OTP to console for easy testing!
+        if (res.data.token) {
+          localStorage.setItem('auth_token', res.data.token);
+          localStorage.setItem('auth_user', JSON.stringify(res.data.user));
+          if (onLogin) onLogin(res.data.user);
+          return;
+        }
+
+        // Fallback for 2FA if step 2 is required
         console.log('--- TEST 2FA OTP GENERATED ---');
         console.log('OTP:', res.data.otp);
         console.log('------------------------------');

@@ -1,19 +1,31 @@
 const nodemailer = require('nodemailer');
 
-// ── HOSTINGER BUSINESS EMAIL SMTP CONFIGURATION ───────────────────────────
-// Default SMTP settings for Hostinger Business Email:
-// Host: smtp.hostinger.com
-// Port: 465 (SSL) or 587 (TLS)
-// Auth: orders@aadyamedicineagencies.com / Password
+// ── BUSINESS / GMAIL SMTP CONFIGURATION ──────────────────────────────────
+// Supports Hostinger (smtp.hostinger.com) and Gmail (smtp.gmail.com / App Passwords)
 const getTransporter = () => {
-  const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = parseInt(process.env.SMTP_PORT || '465', 10);
   const secure = port === 465;
-  const user = process.env.SMTP_USER || 'orders@aadyamedicineagencies.com';
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || 'aadyamedicineagencies@gmail.com';
+  let pass = process.env.SMTP_PASS;
 
   if (!pass) {
     return null; // SMTP credentials not configured yet; will fallback to console log
+  }
+
+  // Google App Passwords often have spaces (e.g. "abcd efgh ijkl mnop"), strip them for authentication
+  pass = pass.replace(/\s+/g, '');
+
+  const isGmail = host.includes('gmail') || (user && user.toLowerCase().endsWith('@gmail.com'));
+
+  if (isGmail) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user,
+        pass,
+      },
+    });
   }
 
   return nodemailer.createTransport({
@@ -40,7 +52,7 @@ const getTransporter = () => {
  * @param {string} options.purpose - 'signup' | 'login' | 'reset'
  */
 const sendOtpEmail = async ({ to, otp, fullName = 'Valued Partner', purpose = 'signup' }) => {
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'orders@aadyamedicineagencies.com';
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'aadyamedicineagencies@gmail.com';
   const companyName = 'Aadya Medicine Agencies';
 
   const subjectMap = {
@@ -108,7 +120,7 @@ const sendOtpEmail = async ({ to, otp, fullName = 'Valued Partner', purpose = 's
     </div>
     <div class="footer">
       &copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.<br>
-      Hostinger Business Mail Gateway · Sent via orders@aadyamedicineagencies.com
+      Secure Mail Gateway · Sent via ${fromEmail}
     </div>
   </div>
 </body>

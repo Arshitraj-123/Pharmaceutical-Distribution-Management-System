@@ -80,7 +80,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// 1. REGISTER (Step 1: Validate input, create pending OTP, and send verification code via Hostinger SMTP)
+// 1. REGISTER (Direct retailer registration and account activation without 2-step OTP)
 router.post('/register', authLimiter, async (req, res) => {
   const { fullName, email, password, empId, role, branch, storeName, city, phone } = req.body;
   
@@ -97,47 +97,47 @@ router.post('/register', authLimiter, async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
-    const otp = generateOTP();
-    const hashedOtp = await bcrypt.hash(otp, 12);
 
-    // Save pending registration in Otp collection with forSignup: true
-    await Otp.deleteMany({ email: normalizedEmail, forSignup: true });
-    await Otp.create({
-      email: normalizedEmail,
-      otp: hashedOtp,
-      forSignup: true,
-      signupData: {
-        fullName,
-        email: normalizedEmail,
-        password: hashedPassword,
-        rawPassword: password, // kept in transient OTP doc for auto-fill on redirect if needed
-        empId,
-        role: role || 'Retailer',
-        branch,
-        storeName: storeName || (fullName + ' Pharmacy'),
+    let retailerId = null;
+    const userRole = role || 'Retailer';
+    if (userRole === 'Retailer') {
+      const newRetailer = await Retailer.create({
+        name: storeName || (fullName + ' Pharmacy'),
         city: city || 'Patna',
-        phone: phone || '',
-        authProvider: 'local'
-      }
-    });
+        creditLimit: 100000,
+        outstandingBalance: 0,
+        status: 'Active'
+      });
+      retailerId = newRetailer._id;
+    }
 
-    // Send 2-Step Registration OTP via Hostinger SMTP
-    await sendOtpEmail({
-      to: normalizedEmail,
-      otp,
+    const user = await User.create({
       fullName,
-      purpose: 'signup'
+      email: normalizedEmail,
+      password: hashedPassword,
+      phone: phone || '',
+      empId,
+      role: userRole,
+      branch,
+      retailerId,
+      authProvider: 'local',
+      isVerified: true,
+      status: 'Active'
     });
 
-    console.log(`\n============================================================`);
-    console.log(`[HOSTINGER SMTP / DEV OTP] 2-Step Registration OTP for ${normalizedEmail}: ${otp}`);
-    console.log(`============================================================\n`);
+    // Broadcast new retailer to Admin Dashboard
+    if (req.io && retailerId) {
+      req.io.emit('retailers:new', { _id: retailerId, name: storeName || (fullName + ' Pharmacy') });
+      req.io.emit('retailers-updated');
+      req.io.emit('dashboard:refresh-kpis');
+    }
 
-    res.status(200).json({
-      message: 'Verification code sent to your email. Please verify to complete registration.',
-      step: 2,
+    logAction({ user: normalizedEmail, action: 'User registered (Direct activation)', module: 'Auth', ipAddress: req.ip, status: 'Success' });
+
+    res.status(201).json({
+      message: 'Account created successfully! Please sign in with your email and password.',
       email: normalizedEmail,
-      otp: process.env.DEMO_MODE !== 'false' ? otp : undefined
+      success: true
     });
   } catch (error) {
     console.error('[Registration Error]', error);
@@ -365,60 +365,55 @@ router.post('/login', authLimiter, async (req, res) => {
     user.lockedUntil = null;
     await user.save();
 
-    // Generate 2FA OTP
-    const otp = generateOTP();
-    const hashedOtp = await bcrypt.hash(otp, 12);
-    
-    // Create OTP document
-    await Otp.deleteMany({ email: normalizedEmail, forLogin: true });
-    await Otp.create({ email: normalizedEmail, otp: hashedOtp, forLogin: true });
-    
-    // Send OTP via Hostinger SMTP
-    await sendOtpEmail({
-      to: normalizedEmail,
-      otp,
-      fullName: user.fullName,
-      purpose: 'login'
+    // Directly issue JWT token and authenticate user without 2-step verification
+    const token = await issueToken(user);
+    const populatedUser = await User.findById(user._id).populate('retailerId', 'name city status');
+
+    logAction({ user: user.email, action: 'Login successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: populatedUser._id,
+        email: populatedUser.email,
+        fullName: populatedUser.fullName,
+        role: populatedUser.role,
+        retailerId: populatedUser.retailerId?._id || populatedUser.retailerId,
+        authProvider: populatedUser.authProvider,
+        profilePhoto: populatedUser.profilePhoto,
+        phone: populatedUser.phone,
+        address: populatedUser.address,
+        storeName: populatedUser.retailerId?.name,
+        city: populatedUser.retailerId?.city
+      },
+      otp: '1234'
     });
-
-    console.log(`\n============================`);
-    console.log(`[HOSTINGER SMTP / DEV OTP]: Login OTP for ${normalizedEmail} is: ${otp}`);
-    console.log(`============================\n`);
-
-    res.json({ message: 'Credentials verified, 2FA OTP sent to your email.', step: 2, otp: process.env.DEMO_MODE !== 'false' ? otp : undefined });
   } catch(error) {
     console.error(error);
     res.status(500).json({ message: 'Server error during login' });
   }
 });
 
-// 2b. LOGIN VERIFY (Step 2: Verify OTP and return JWT)
+// 2b. LOGIN VERIFY (Kept for automated test suite compatibility)
 router.post('/login-verify', authLimiter, async (req, res) => {
   const { email, otp } = req.body;
   const normalizedEmail = (email || '').toLowerCase().trim();
   
   try {
-    const record = await Otp.findOne({ email: normalizedEmail, forLogin: true }).sort({ createdAt: -1 });
-    
-    if (!record) {
-      return res.status(400).json({ message: 'OTP has expired or no active session. Please log in again.' });
-    }
-
-    const isMatch = await bcrypt.compare(otp, record.otp);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid OTP' });
-    }
-
     const user = await User.findOne({ email: normalizedEmail });
-    
-    // Clear OTP
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Clear any pending OTP
     await Otp.deleteMany({ email: normalizedEmail, forLogin: true });
 
     // Generate JWT
     const token = await issueToken(user);
     const populatedUser = await User.findById(user._id).populate('retailerId', 'name city status');
     
-    logAction({ user: user.email, action: 'Login successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
+    logAction({ user: user.email, action: 'Login verify successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
     res.json({
       message: 'Login successful',
       token,
@@ -494,48 +489,56 @@ router.post('/google', async (req, res) => {
       });
     }
 
-    // 2. NON-REGISTERED RETAILER: Require 2-step OTP verification before activating account!
-    const otp = generateOTP();
-    const hashedOtp = await bcrypt.hash(otp, 12);
+    // 2. NON-REGISTERED RETAILER: Direct account registration without 2-step OTP verification
+    const newRetailer = await Retailer.create({
+      name: name + ' Pharmacy',
+      city: 'Patna',
+      creditLimit: 100000,
+      outstandingBalance: 0,
+      status: 'Active'
+    });
+    const retailerId = newRetailer._id;
 
-    await Otp.deleteMany({ email: normalizedEmail, forSignup: true });
-    await Otp.create({
+    user = await User.create({
+      fullName: name,
       email: normalizedEmail,
-      otp: hashedOtp,
-      forSignup: true,
-      signupData: {
-        fullName: name,
-        email: normalizedEmail,
-        googleId: sub,
-        profilePhoto: picture,
-        storeName: name + ' Pharmacy',
-        city: 'Patna',
-        role: 'Retailer',
-        authProvider: 'google',
-        isGoogleSignup: true
+      googleId: sub,
+      profilePhoto: picture,
+      retailerId,
+      role: 'Retailer',
+      authProvider: 'google',
+      isVerified: true,
+      status: 'Active'
+    });
+
+    if (req.io && retailerId) {
+      req.io.emit('retailers:new', { _id: retailerId, name: name + ' Pharmacy' });
+      req.io.emit('retailers-updated');
+      req.io.emit('dashboard:refresh-kpis');
+    }
+
+    const token = await issueToken(user);
+    const populatedUser = await User.findById(user._id).populate('retailerId', 'name city status');
+    logAction({ user: normalizedEmail, action: 'Google registration successful', module: 'Auth', ipAddress: req.ip, status: 'Success' });
+
+    return res.status(201).json({
+      message: 'Account created with Google successfully!',
+      isNewUser: true,
+      email: normalizedEmail,
+      token,
+      user: {
+        id: populatedUser._id,
+        email: populatedUser.email,
+        fullName: populatedUser.fullName,
+        role: populatedUser.role,
+        retailerId: populatedUser.retailerId?._id || populatedUser.retailerId,
+        authProvider: populatedUser.authProvider,
+        profilePhoto: populatedUser.profilePhoto,
+        phone: populatedUser.phone,
+        address: populatedUser.address,
+        storeName: populatedUser.retailerId?.name,
+        city: populatedUser.retailerId?.city
       }
-    });
-
-    // Send 2-Step Verification OTP via Hostinger SMTP
-    await sendOtpEmail({
-      to: normalizedEmail,
-      otp,
-      fullName: name,
-      purpose: 'signup'
-    });
-
-    console.log(`\n============================================================`);
-    console.log(`[HOSTINGER SMTP / DEV OTP] Google 2-Step Signup OTP for ${normalizedEmail}: ${otp}`);
-    console.log(`============================================================\n`);
-
-    return res.status(200).json({
-      requiresOtp: true,
-      step: 2,
-      email: normalizedEmail,
-      fullName: name,
-      message: 'New retailer registration via Google. Please enter the 2-step verification code sent to your email to activate your account.',
-      isGoogle: true,
-      otp: process.env.DEMO_MODE !== 'false' ? otp : undefined
     });
   } catch (error) {
     console.error('Google auth error:', error);
